@@ -166,8 +166,8 @@ private:
 
     };
 
-    array<RoundInfo, QEARN_MAX_LOCKS> _InitialRoundInfo;
-    array<RoundInfo, QEARN_MAX_LOCKS> _CurrentRoundInfo;
+    array<RoundInfo, QEARN_MAX_EPOCHS> _InitialRoundInfo;
+    array<RoundInfo, QEARN_MAX_EPOCHS> _CurrentRoundInfo;
 
     struct EpochIndexInfo {
 
@@ -175,7 +175,7 @@ private:
         uint32 endIndex;
     };
 
-    array<EpochIndexInfo, QEARN_MAX_LOCKS> EpochIndex;
+    array<EpochIndexInfo, QEARN_MAX_EPOCHS> EpochIndex;
 
     struct LockInfo {
 
@@ -203,7 +203,11 @@ private:
     uint32 _EarlyUnlocked_cnt;
     uint32 _FullyUnlocked_cnt;
 
-    PUBLIC_FUNCTION(GetStateOfRound)
+    struct GetStateOfRound_locals {
+        uint32 first_epoch;
+    };
+
+    PUBLIC_FUNCTION_WITH_LOCALS(GetStateOfRound)
         if(input.Epoch < QEARN_INITIAL_EPOCH) 
         {                                                            // non staking
             output.state = 2; 
@@ -213,11 +217,12 @@ private:
         {
             output.state = 0;                                     // opening round, not started yet
         }
-        if(input.Epoch <= qpi.epoch() && input.Epoch >= qpi.epoch() - 52) 
+        locals.first_epoch = qpi.epoch() - 52;
+        if(input.Epoch <= qpi.epoch() && input.Epoch >= locals.first_epoch) 
         {
             output.state = 1;       // running round, available unlocking early
         }
-        if(input.Epoch < qpi.epoch() - 52) 
+        if(input.Epoch < locals.first_epoch) 
         {
             output.state = 2;       // ended round
         }
@@ -326,7 +331,7 @@ private:
         LockInfo newLocker;
         RoundInfo updatedRoundInfo;
         EpochIndexInfo tmpIndex;
-        sint32 t;
+        uint32 t;
         uint32 endIndex;
         
     };
@@ -390,6 +395,16 @@ private:
             }
             return ;                        // overflow users in Qearn
         }
+        
+        if(qpi.invocationReward() > QEARN_MAX_LOCK_AMOUNT)
+        {
+            output.returnCode = QEARN_LIMIT_LOCK;
+            if(qpi.invocationReward() > 0) 
+            {
+                qpi.transfer(qpi.invocator(), qpi.invocationReward());
+            }
+            return;
+        }
 
         locals.newLocker.ID = qpi.invocator();
         locals.newLocker._Locked_Amount = qpi.invocationReward();
@@ -424,7 +439,7 @@ private:
         uint64 RewardPercent;
         sint64 divCalcu;
         uint32 indexOfinvocator;
-        sint32 t;
+        uint32 t;
         uint32 count_Of_last_vacancy;
         uint32 locked_weeks;
         uint32 startIndex;
@@ -574,9 +589,18 @@ private:
 
         state._CurrentRoundInfo.set(input.Locked_Epoch, locals.updatedRoundInfo);
 
-        locals.updatedUserInfo.ID = qpi.invocator();
-        locals.updatedUserInfo._Locked_Amount = state.Locker.get(locals.indexOfinvocator)._Locked_Amount - locals.AmountOfUnlocking;
-        locals.updatedUserInfo._Locked_Epoch = state.Locker.get(locals.indexOfinvocator)._Locked_Epoch;
+        if(state.Locker.get(locals.indexOfinvocator)._Locked_Amount == locals.AmountOfUnlocking)
+        {
+            locals.updatedUserInfo.ID = NULL_ID;
+            locals.updatedUserInfo._Locked_Amount = 0;
+            locals.updatedUserInfo._Locked_Epoch = 0;
+        }
+        else 
+        {
+            locals.updatedUserInfo.ID = qpi.invocator();
+            locals.updatedUserInfo._Locked_Amount = state.Locker.get(locals.indexOfinvocator)._Locked_Amount - locals.AmountOfUnlocking;
+            locals.updatedUserInfo._Locked_Epoch = state.Locker.get(locals.indexOfinvocator)._Locked_Epoch;
+        }
 
         state.Locker.set(locals.indexOfinvocator, locals.updatedUserInfo);
 
@@ -695,7 +719,7 @@ private:
         uint64 _burn_amount;
         uint32 locked_epoch;
         uint32 startEpoch;
-        sint32 _t;
+        uint32 _t;
         sint32 st;
         sint32 en;
         uint32 empty_cnt;
@@ -782,6 +806,8 @@ private:
                     locals.empty_cnt++;
                 }
 
+                if(locals.st > locals.en) break;
+
                 locals.INITIALIZE_USER.ID = state.Locker.get(locals.en).ID;
                 locals.INITIALIZE_USER._Locked_Amount = state.Locker.get(locals.en)._Locked_Amount;
                 locals.INITIALIZE_USER._Locked_Epoch = state.Locker.get(locals.en)._Locked_Epoch;
@@ -799,24 +825,31 @@ private:
                 locals.empty_cnt++;
             }
 
-            if(locals.st == locals.en)
+            if(locals.st == locals.en && !state.Locker.get(locals.st)._Locked_Amount)
             {
                 locals.empty_cnt++;
             }
 
-            locals.tmpEpochIndex.startIndex = state.EpochIndex.get(locals._t).startIndex;
+            if(locals._t == locals.startEpoch) 
+            {
+                locals.tmpEpochIndex.startIndex = 0;
+            }
+            else 
+            {
+                locals.tmpEpochIndex.startIndex = state.EpochIndex.get(locals._t).startIndex;
+            }
             locals.tmpEpochIndex.endIndex = state.EpochIndex.get(locals._t).endIndex - locals.empty_cnt;
 
             state.EpochIndex.set(locals._t, locals.tmpEpochIndex);
 
-            locals.tmpEpochIndex.startIndex = state.EpochIndex.get(locals._t).endIndex - locals.empty_cnt;
+            locals.tmpEpochIndex.startIndex = locals.tmpEpochIndex.endIndex;
             locals.tmpEpochIndex.endIndex = state.EpochIndex.get(locals._t + 1).endIndex;
 
             state.EpochIndex.set(locals._t + 1, locals.tmpEpochIndex);
             
         }
 
-        locals.tmpEpochIndex.startIndex = state.EpochIndex.get(qpi.epoch()).endIndex - locals.empty_cnt;
+        locals.tmpEpochIndex.startIndex = state.EpochIndex.get(qpi.epoch() + 1).startIndex;
         locals.tmpEpochIndex.endIndex = locals.tmpEpochIndex.startIndex;
 
         state.EpochIndex.set(qpi.epoch() + 1, locals.tmpEpochIndex);
