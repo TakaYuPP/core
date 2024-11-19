@@ -9,7 +9,7 @@
 // random seed is now obtained from spectrumDigests
 
 #define MAX_NUMBER_OF_PROCESSORS 32
-#define NUMBER_OF_SOLUTION_PROCESSORS 6 // do not increase this for this epoch, because there may be issues due to too fast ticking
+#define NUMBER_OF_SOLUTION_PROCESSORS 12 // do not increase this, because there may be issues due to too fast ticking
 
 // Number of buffers available for executing contract functions in parallel; having more means reserving a bit more RAM (+1 = +32 MB)
 // and less waiting in request processors if there are more parallel contract function requests. The maximum value that may make sense
@@ -23,8 +23,8 @@
 // Number of ticks from prior epoch that are kept after seamless epoch transition. These can be requested after transition.
 #define TICKS_TO_KEEP_FROM_PRIOR_EPOCH 100
 
-#define TARGET_TICK_DURATION 2000
-#define TRANSACTION_SPARSENESS 3
+#define TARGET_TICK_DURATION 1500
+#define TRANSACTION_SPARSENESS 2
 
 // Below are 2 variables that are used for auto-F5 feature:
 #define AUTO_FORCE_NEXT_TICK_THRESHOLD 0ULL // Multiplier of TARGET_TICK_DURATION for the system to detect "F5 case" | set to 0 to disable
@@ -40,7 +40,7 @@
 // If this flag is 1, it indicates that the whole network (all 676 IDs) will start from scratch and agree that the very first tick time will be set at (2022-04-13 Wed 12:00:00.000UTC).
 // If this flag is 0, the node will try to fetch data of the initial tick of the epoch from other nodes, because the tick's timestamp may differ from (2022-04-13 Wed 12:00:00.000UTC).
 // If you restart your node after seamless epoch transition, make sure EPOCH and TICK are set correctly for the currently running epoch.
-#define START_NETWORK_FROM_SCRATCH 1
+#define START_NETWORK_FROM_SCRATCH 0
 
 // Addons: If you don't know it, leave it 0.
 #define ADDON_TX_STATUS_REQUEST 0
@@ -49,12 +49,12 @@
 // Config options that should NOT be changed by operators
 
 #define VERSION_A 1
-#define VERSION_B 214
-#define VERSION_C 1
+#define VERSION_B 225
+#define VERSION_C 3
 
 // Epoch and initial tick for node startup
-#define EPOCH 122
-#define TICK 15390000
+#define EPOCH 135
+#define TICK 17160956
 
 #define ARBITRATOR "AFZPUAIYVPNUYGJRQVLUKOPPVLHAZQTGLYAAUUNBXFTVTAMSBKQBLEIEPCVJ"
 
@@ -68,12 +68,13 @@ static unsigned short CONTRACT_FILE_NAME[] = L"contract????.???";
 static unsigned short REVENUE_FILE_NAME[] = L"revenueScore"; // TODO: for testing purpose, will delete at epoch 111
 
 #define DATA_LENGTH 256
-#define NUMBER_OF_INPUT_NEURONS 8192
-#define NUMBER_OF_OUTPUT_NEURONS 8192
-#define MAX_INPUT_DURATION 16384
-#define MAX_OUTPUT_DURATION 16384
+#define NUMBER_OF_HIDDEN_NEURONS 10000
+#define NUMBER_OF_NEIGHBOR_NEURONS 10000
+#define MAX_DURATION 100000000
 #define NEURON_VALUE_LIMIT 1LL
-#define SOLUTION_THRESHOLD_DEFAULT 40
+#define SOLUTION_THRESHOLD_DEFAULT 45
+
+#define SOLUTION_SECURITY_DEPOSIT 1000000
 
 // include commonly needed definitions
 #include "network_messages/common_def.h"
@@ -81,6 +82,9 @@ static unsigned short REVENUE_FILE_NAME[] = L"revenueScore"; // TODO: for testin
 #define MAX_NUMBER_OF_TICKS_PER_EPOCH (((((60 * 60 * 24 * 7) / (TARGET_TICK_DURATION / 1000)) + NUMBER_OF_COMPUTORS - 1) / NUMBER_OF_COMPUTORS) * NUMBER_OF_COMPUTORS)
 #define FIRST_TICK_TRANSACTION_OFFSET sizeof(unsigned long long)
 #define MAX_TRANSACTION_SIZE (MAX_INPUT_SIZE + sizeof(Transaction) + SIGNATURE_SIZE)
+
+#define INTERNAL_COMPUTATIONS_INTERVAL 676
+#define EXTERNAL_COMPUTATIONS_INTERVAL (676 + 1)
 
 #define STACK_SIZE 4194304
 #define TRACK_MAX_STACK_BUFFER_SIZE

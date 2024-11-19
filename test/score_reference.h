@@ -6,44 +6,63 @@
 ////////// Original (reference) scoring algorithm \\\\\\\\\\
 
 template<
-    unsigned int dataLength,
-    unsigned int numberOfInputNeurons,
-    unsigned int _numberOfOutputNeurons,
-    unsigned int maxInputDuration,
-    unsigned int _maxOutputDuration,
-    unsigned int solutionBufferCount
+    unsigned long long dataLength,
+    unsigned long long numberOfHiddenNeurons,
+    unsigned long long numberOfNeighborNeurons,
+    unsigned long long maxDuration,
+    unsigned long long solutionBufferCount
 >
 struct ScoreReferenceImplementation
 {
-    static constexpr unsigned long long synapseInputSize = ((unsigned long long)numberOfInputNeurons + dataLength) * (dataLength + numberOfInputNeurons + dataLength);
+    static constexpr unsigned long long neuronsCount = dataLength + numberOfHiddenNeurons + dataLength;
+    static constexpr unsigned long long synapseSignsCount = (dataLength + numberOfHiddenNeurons + dataLength) * numberOfNeighborNeurons / 64;
+    static constexpr unsigned long long synapseInputCount = synapseSignsCount + maxDuration;
     long long miningData[dataLength];
 
     //neuron only has values [-1, 0, 1]
-    struct
+    struct Neuron
     {
-        char input[dataLength + numberOfInputNeurons + dataLength];
-        char neuronBuffer[dataLength + numberOfInputNeurons + dataLength];
-    } _neurons[solutionBufferCount];
+        //long long input[dataLength + numberOfHiddenNeurons + dataLength];
+        long long* input;
+    };
     struct Synapse
     {
-        char* inputLength;
+        //unsigned long long signs[(dataLength + numberOfHiddenNeurons + dataLength) * numberOfNeighborNeurons / 64];
+        //unsigned long long sequence[maxDuration];
+        unsigned long long* data;
+
+        // Pointer to data
+        unsigned long long* signs;
+        unsigned long long* sequence;
     };
 
+    Neuron _neurons[solutionBufferCount];
     Synapse _synapses[solutionBufferCount];
+    unsigned char* _poolBuffer[solutionBufferCount];
 
     void initMemory()
     {
         for (int i = 0; i < solutionBufferCount; i++)
         {
-            allocatePool(synapseInputSize, (void**) & (_synapses[i].inputLength));
+            allocatePool(RANDOM2_POOL_SIZE, (void**)&(_poolBuffer[i]));
+
+            allocatePool(sizeof(long long) * neuronsCount, (void**)(&(_neurons[i].input)));
+
+            allocatePool(sizeof(unsigned long long) * synapseInputCount, (void**)(&(_synapses[i].data)));
+            _synapses[i].signs = _synapses[i].data;
+            _synapses[i].sequence = _synapses[i].data + synapseSignsCount;
         }
+
+        static_assert(synapseInputCount * sizeof(*(_synapses->data)) % 8 == 0, "Random2 require output size is a multiplier of 8");
     }
 
     void freeMemory()
     {
         for (int i = 0; i < solutionBufferCount; i++)
         {
-            freePool(_synapses[i].inputLength);
+            freePool(_poolBuffer[i]);
+            freePool(_neurons[i].input);
+            freePool(_synapses[i].data);
         }
     }
 
@@ -52,10 +71,19 @@ struct ScoreReferenceImplementation
         freeMemory();
     }
 
-    void initMiningData()
+    void initMiningData(m256i randomSeed)
+    {
+        random(randomSeed.m256i_u8, randomSeed.m256i_u8, (unsigned char*)miningData, sizeof(miningData));
+        for (unsigned int i = 0; i < dataLength; i++)
+        {
+            miningData[i] = (miningData[i] >= 0 ? 1 : -1);
+        }
+    }
+
+    void initMiningData(unsigned char* seed)
     {
         unsigned char randomSeed[32];
-        setMem(randomSeed, 32, 0);
+        copyMem(randomSeed, seed, 32);
         random(randomSeed, randomSeed, (unsigned char*)miningData, sizeof(miningData));
         for (unsigned int i = 0; i < dataLength; i++)
         {
@@ -77,68 +105,52 @@ struct ScoreReferenceImplementation
     {
         processorNumber %= solutionBufferCount;
         auto& neurons = _neurons[processorNumber];
-        auto& neuronBufferInput = neurons.neuronBuffer;
         auto& synapses = _synapses[processorNumber];
-        memset(&neurons, 0, sizeof(neurons));
-        random(publicKey, nonce, (unsigned char*)synapses.inputLength, synapseInputSize);
-        for (unsigned long long inputNeuronIndex = 0; inputNeuronIndex < numberOfInputNeurons + dataLength; inputNeuronIndex++)
+        auto& random2PoolBuffer = _poolBuffer[processorNumber];
+
+        memset(neurons.input, 0, sizeof(neurons.input[0]) * neuronsCount);
+
+        random2(publicKey, nonce, (unsigned char*)synapses.data, synapseInputCount * sizeof(synapses.data[0]), random2PoolBuffer);
+        memcpy(&neurons.input[0], miningData, sizeof(miningData));
+
+        for (long long tick = 0; tick < maxDuration; tick++)
         {
-            for (unsigned long long anotherInputNeuronIndex = 0; anotherInputNeuronIndex < dataLength + numberOfInputNeurons + dataLength; anotherInputNeuronIndex++)
+            const unsigned long long neuronIndex = dataLength + synapses.sequence[tick] % (numberOfHiddenNeurons + dataLength);
+            const unsigned long long neighborNeuronIndex = (synapses.sequence[tick] / (numberOfHiddenNeurons + dataLength)) % numberOfNeighborNeurons;
+            unsigned long long supplierNeuronIndex;
+            if (neighborNeuronIndex < numberOfNeighborNeurons / 2)
             {
-                const unsigned long long offset = inputNeuronIndex * (dataLength + numberOfInputNeurons + dataLength) + anotherInputNeuronIndex;
-                if (synapses.inputLength[offset] == -128)
-                {
-                    synapses.inputLength[offset] = 0;
-                }
+                supplierNeuronIndex = (neuronIndex - (numberOfNeighborNeurons / 2) + neighborNeuronIndex + (dataLength + numberOfHiddenNeurons + dataLength)) % (dataLength + numberOfHiddenNeurons + dataLength);
             }
-        }
-        for (unsigned long long inputNeuronIndex = 0; inputNeuronIndex < numberOfInputNeurons + dataLength; inputNeuronIndex++)
-        {
-            synapses.inputLength[inputNeuronIndex * (dataLength + numberOfInputNeurons + dataLength) + (dataLength + inputNeuronIndex)] = 0;
-        }
-        for (int i = 0; i < dataLength; i++)
-        {
-            neurons.input[i] = (char)(miningData[i]);
-        }
-
-        for (int tick = 1; tick <= maxInputDuration; tick++)
-        {
-            copyMem(&neuronBufferInput[0], &neurons.input[0], sizeof(neurons.input));
-            for (unsigned long long inputNeuronIndex = 0; inputNeuronIndex < numberOfInputNeurons + dataLength; inputNeuronIndex++)
+            else
             {
-                for (unsigned long long anotherInputNeuronIndex = 0; anotherInputNeuronIndex < dataLength + numberOfInputNeurons + dataLength; anotherInputNeuronIndex++)
-                {
-                    const unsigned long long offset = inputNeuronIndex * (dataLength + numberOfInputNeurons + dataLength) + anotherInputNeuronIndex;
-                    if (synapses.inputLength[offset] != 0
-                        && tick % synapses.inputLength[offset] == 0)
-                    {
-                        if (synapses.inputLength[offset] > 0)
-                        {
-                            neurons.input[dataLength + inputNeuronIndex] += neuronBufferInput[anotherInputNeuronIndex];
-                        }
-                        else
-                        {
-                            neurons.input[dataLength + inputNeuronIndex] -= neuronBufferInput[anotherInputNeuronIndex];
-                        }
+                supplierNeuronIndex = (neuronIndex + 1 - (numberOfNeighborNeurons / 2) + neighborNeuronIndex + (dataLength + numberOfHiddenNeurons + dataLength)) % (dataLength + numberOfHiddenNeurons + dataLength);
+            }
+            const unsigned long long offset = neuronIndex * numberOfNeighborNeurons + neighborNeuronIndex;
 
-                        if (neurons.input[dataLength + inputNeuronIndex] > NEURON_VALUE_LIMIT)
-                        {
-                            neurons.input[dataLength + inputNeuronIndex] = NEURON_VALUE_LIMIT;
-                        }
-                        if (neurons.input[dataLength + inputNeuronIndex] < -NEURON_VALUE_LIMIT)
-                        {
-                            neurons.input[dataLength + inputNeuronIndex] = -NEURON_VALUE_LIMIT;
-                        }
-                    }
-                }
+            if (!(synapses.signs[offset / 64] & (1ULL << (offset % 64))))
+            {
+                neurons.input[neuronIndex] += neurons.input[supplierNeuronIndex];
+            }
+            else
+            {
+                neurons.input[neuronIndex] -= neurons.input[supplierNeuronIndex];
+            }
+
+            if (neurons.input[neuronIndex] > 1)
+            {
+                neurons.input[neuronIndex] = 1;
+            }
+            if (neurons.input[neuronIndex] < -1)
+            {
+                neurons.input[neuronIndex] = -1;
             }
         }
 
         unsigned int score = 0;
-
-        for (unsigned int i = 0; i < dataLength; i++)
+        for (unsigned long long i = 0; i < dataLength; i++)
         {
-            if (miningData[i] == neurons.input[dataLength + numberOfInputNeurons + i])
+            if (miningData[i] == neurons.input[dataLength + numberOfHiddenNeurons + i])
             {
                 score++;
             }

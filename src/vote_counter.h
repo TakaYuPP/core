@@ -1,6 +1,7 @@
 #pragma once
 #include "platform/memory.h"
 #include "network_messages/transactions.h"
+#define VOTE_COUNTER_INPUT_TYPE 1
 #define VOTE_COUNTER_DATA_SIZE_IN_BYTES 848
 #define VOTE_COUNTER_NUM_BIT_PER_COMP 10
 static_assert((1<< VOTE_COUNTER_NUM_BIT_PER_COMP) >= NUMBER_OF_COMPUTORS, "Invalid number of bit per datum");
@@ -47,6 +48,7 @@ protected:
 	}
 
 public:
+	static constexpr unsigned int VoteCounterDataSize = sizeof(votes) + sizeof(accumulatedVoteCount);
 	void init()
 	{
 		setMem(votes, sizeof(votes), 0);
@@ -88,6 +90,10 @@ public:
 		for (int i = 0; i < NUMBER_OF_COMPUTORS; i++)
 		{
 			buffer[i] = extract10Bit(votePacket, i);
+			if (buffer[i] > NUMBER_OF_COMPUTORS)
+			{
+				return false;
+			}
 			sum += buffer[i];
 		}
 		// check #0: sum of all vote must be >= 675*451 (vote of the tick leader is removed)
@@ -118,5 +124,17 @@ public:
 	unsigned long long getVoteCount(unsigned int computorIdx)
 	{
 		return accumulatedVoteCount[computorIdx];
+	}
+
+	void saveAllDataToArray(unsigned char* dst)
+	{
+		copyMem(dst, &votes[0][0], sizeof(votes));
+		copyMem(dst + sizeof(votes), &accumulatedVoteCount[0], sizeof(accumulatedVoteCount));
+	}
+
+	void loadAllDataFromArray(const unsigned char* src)
+	{
+		copyMem(&votes[0][0], src, sizeof(votes));
+		copyMem(&accumulatedVoteCount[0], src + sizeof(votes), sizeof(accumulatedVoteCount));
 	}
 };

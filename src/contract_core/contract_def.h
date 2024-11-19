@@ -2,13 +2,13 @@
 
 #include "platform/m256.h"
 
-#include "network_messages/common_def.h"
-
 ////////// Smart contracts \\\\\\\\\\
 
 // The order in this file is very important, because it restricts what is available to the contracts.
 // For example, a contract may only call a contract with lower index, which is enforced by order of
 // include / availability of definition.
+// Additionally, most types, functions, and variables of the core have to be defined after including
+// the contract to keep them unavailable in the contract code.
 
 namespace QPI
 {
@@ -21,6 +21,8 @@ typedef void (*SYSTEM_PROCEDURE)(const QPI::QpiContextProcedureCall&, void* stat
 typedef void (*EXPAND_PROCEDURE)(const QPI::QpiContextFunctionCall&, void*, void*); // cannot not change anything except state
 typedef void (*USER_FUNCTION)(const QPI::QpiContextFunctionCall&, void* state, void* input, void* output, void* locals);
 typedef void (*USER_PROCEDURE)(const QPI::QpiContextProcedureCall&, void* state, void* input, void* output, void* locals);
+
+constexpr unsigned long long MAX_CONTRACT_STATE_SIZE = 1073741824;
 
 // Maximum size of local variables that may be used by a contract function or procedure
 // If increased, the size of contractLocalsStack should be increased as well.
@@ -58,7 +60,10 @@ struct __FunctionOrProcedureBeginEndGuard
 };
 
 
+// With no other includes before, the following are the only headers available to contracts.
+// When adding something, be cautious to keep access of contracts limited to safe features only.
 #include "contracts/qpi.h"
+#include "qpi_proposal_voting.h"
 
 #define QX_CONTRACT_INDEX 1
 #define CONTRACT_INDEX QX_CONTRACT_INDEX
@@ -126,6 +131,17 @@ struct __FunctionOrProcedureBeginEndGuard
 #define CONTRACT_STATE2_TYPE SWATCH2
 #include "contracts/SupplyWatcher.h"
 
+#undef CONTRACT_INDEX
+#undef CONTRACT_STATE_TYPE
+#undef CONTRACT_STATE2_TYPE
+
+#define CCF_CONTRACT_INDEX 8
+#define CONTRACT_INDEX CCF_CONTRACT_INDEX
+#define CONTRACT_STATE_TYPE CCF
+#define CONTRACT_STATE2_TYPE CCF2
+#include "contracts/ComputorControlledFund.h"
+
+
 #define MAX_CONTRACT_ITERATION_DURATION 0 // In milliseconds, must be above 0; for now set to 0 to disable timeout, because a rollback mechanism needs to be implemented to properly handle timeout
 
 #undef INITIALIZE
@@ -138,6 +154,14 @@ struct __FunctionOrProcedureBeginEndGuard
 #undef POST_RELEASE_SHARES
 #undef POST_ACQUIRE_SHARES
 
+// The following are included after the contracts to keep their definitions and dependencies
+// inaccessible for contracts
+#include "qpi_collection_impl.h"
+#include "qpi_trivial_impl.h"
+
+#include "platform/global_var.h"
+
+#include "network_messages/common_def.h"
 
 struct Contract0State
 {
@@ -166,31 +190,32 @@ constexpr struct ContractDescription
     {"RANDOM", 88, 10000, sizeof(IPO)},
     {"QUTIL", 99, 10000, sizeof(IPO)},
     {"MLM", 112, 10000, sizeof(IPO)},
-    {"GQMPROP", 123, 10000, sizeof(IPO)},
+    {"GQMPROP", 123, 10000, sizeof(GQMPROP)},
     {"SWATCH", 123, 10000, sizeof(IPO)},
+    {"CCF", 127, 10000, sizeof(CCF)}, // proposal in epoch 125, IPO in 126, construction and first use in 127
 };
 
 constexpr unsigned int contractCount = sizeof(contractDescriptions) / sizeof(contractDescriptions[0]);
 
-static EXPAND_PROCEDURE contractExpandProcedures[contractCount];
+GLOBAL_VAR_DECL EXPAND_PROCEDURE contractExpandProcedures[contractCount];
 
 // TODO: all below are filled very sparsely, so a better data structure could save almost all the memory
-static USER_FUNCTION contractUserFunctions[contractCount][65536];
-static unsigned short contractUserFunctionInputSizes[contractCount][65536];
-static unsigned short contractUserFunctionOutputSizes[contractCount][65536];
+GLOBAL_VAR_DECL USER_FUNCTION contractUserFunctions[contractCount][65536];
+GLOBAL_VAR_DECL unsigned short contractUserFunctionInputSizes[contractCount][65536];
+GLOBAL_VAR_DECL unsigned short contractUserFunctionOutputSizes[contractCount][65536];
 // This has been changed to unsigned short to avoid the misalignment issue happening in epochs 109 and 110,
 // probably due to too high numbers in contractUserProcedureLocalsSizes causing stack buffer alloc to fail
 // probably due to buffer overflow that is difficult to reproduce in test net
 // TODO: change back to unsigned int
-static unsigned short contractUserFunctionLocalsSizes[contractCount][65536];
-static USER_PROCEDURE contractUserProcedures[contractCount][65536];
-static unsigned short contractUserProcedureInputSizes[contractCount][65536];
-static unsigned short contractUserProcedureOutputSizes[contractCount][65536];
+GLOBAL_VAR_DECL unsigned short contractUserFunctionLocalsSizes[contractCount][65536];
+GLOBAL_VAR_DECL USER_PROCEDURE contractUserProcedures[contractCount][65536];
+GLOBAL_VAR_DECL unsigned short contractUserProcedureInputSizes[contractCount][65536];
+GLOBAL_VAR_DECL unsigned short contractUserProcedureOutputSizes[contractCount][65536];
 // This has been changed to unsigned short to avoid the misalignment issue happening in epochs 109 and 110,
 // probably due to too high numbers in contractUserProcedureLocalsSizes causing stack buffer alloc to fail
 // probably due to buffer overflow that is difficult to reproduce in test net
 // TODO: change back to unsigned int
-static unsigned short contractUserProcedureLocalsSizes[contractCount][65536];
+GLOBAL_VAR_DECL unsigned short contractUserProcedureLocalsSizes[contractCount][65536];
 
 enum SystemProcedureID
 {
@@ -212,11 +237,12 @@ enum MoreProcedureIDs
     USER_PROCEDURE_CALL = contractSystemProcedureCount + 1,
 };
 
-static SYSTEM_PROCEDURE contractSystemProcedures[contractCount][contractSystemProcedureCount];
-static unsigned short contractSystemProcedureLocalsSizes[contractCount][contractSystemProcedureCount];
+GLOBAL_VAR_DECL SYSTEM_PROCEDURE contractSystemProcedures[contractCount][contractSystemProcedureCount];
+GLOBAL_VAR_DECL unsigned short contractSystemProcedureLocalsSizes[contractCount][contractSystemProcedureCount];
 
 
-#define REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(contractName)\
+#define REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(contractName) { \
+constexpr unsigned int contractIndex = contractName##_CONTRACT_INDEX; \
 if (!contractName::__initializeEmpty) contractSystemProcedures[contractIndex][INITIALIZE] = (SYSTEM_PROCEDURE)contractName::__initialize;\
 contractSystemProcedureLocalsSizes[contractIndex][INITIALIZE] = contractName::__initializeLocalsSize; \
 if (!contractName::__beginEpochEmpty) contractSystemProcedures[contractIndex][BEGIN_EPOCH] = (SYSTEM_PROCEDURE)contractName::__beginEpoch;\
@@ -236,54 +262,19 @@ contractSystemProcedureLocalsSizes[contractIndex][POST_ACQUIRE_SHARES] = contrac
 if (!contractName::__postReleaseSharesEmpty) contractSystemProcedures[contractIndex][POST_RELEASE_SHARES] = (SYSTEM_PROCEDURE)contractName::__postReleaseShares;\
 contractSystemProcedureLocalsSizes[contractIndex][POST_RELEASE_SHARES] = contractName::__postReleaseSharesSize; \
 if (!contractName::__expandEmpty) contractExpandProcedures[contractIndex] = (EXPAND_PROCEDURE)contractName::__expand;\
-((contractName*)contractState)->__registerUserFunctionsAndProcedures(qpi);
+QpiContextForInit qpi(contractIndex); \
+contractName::__registerUserFunctionsAndProcedures(qpi); \
+}
 
 
-static void initializeContract(const unsigned int contractIndex, void* contractState)
+static void initializeContracts()
 {
-    QpiContextForInit qpi(contractIndex);
-    switch (contractIndex)
-    {
-    case QX_CONTRACT_INDEX:
-    {
-        REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(QX);
-    }
-    break;
-
-    case QUOTTERY_CONTRACT_INDEX:
-    {
-        REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(QUOTTERY);
-    }
-    break;
-
-    case RANDOM_CONTRACT_INDEX:
-    {
-        REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(RANDOM);
-    }
-    break;
-
-    case QUTIL_CONTRACT_INDEX:
-    {
-        REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(QUTIL);
-    }
-    break;
-
-    case MLM_CONTRACT_INDEX:
-    {
-        REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(MLM);
-    }
-    break;
-
-    case GQMPROP_CONTRACT_INDEX:
-    {
-        REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(GQMPROP);
-    }
-    break;
-
-    case SWATCH_CONTRACT_INDEX:
-    {
-        REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(GQMPROP);
-    }
-    break;
-    }
+    REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(QX);
+    REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(QUOTTERY);
+    REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(RANDOM);
+    REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(QUTIL);
+    REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(MLM);
+    REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(GQMPROP);
+    REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(SWATCH);
+    REGISTER_CONTRACT_FUNCTIONS_AND_PROCEDURES(CCF);
 }

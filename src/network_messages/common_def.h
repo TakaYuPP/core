@@ -2,11 +2,14 @@
 
 #define SIGNATURE_SIZE 64
 #define NUMBER_OF_TRANSACTIONS_PER_TICK 1024 // Must be 2^N
+#define MAX_NUMBER_OF_PENDING_TRANSACTIONS_PER_COMPUTOR 128
 #define MAX_NUMBER_OF_CONTRACTS 1024 // Must be 1024
 #define NUMBER_OF_COMPUTORS 676
 #define QUORUM (NUMBER_OF_COMPUTORS * 2 / 3 + 1)
 #define NUMBER_OF_EXCHANGED_PEERS 4
+
 #define SPECTRUM_DEPTH 24 // Defines SPECTRUM_CAPACITY (1 << SPECTRUM_DEPTH)
+#define SPECTRUM_CAPACITY (1ULL << SPECTRUM_DEPTH) // Must be 2^N
 
 #define ASSETS_CAPACITY 0x1000000ULL // Must be 2^N
 #define ASSETS_DEPTH 24 // Is derived from ASSETS_CAPACITY (=N)
@@ -14,6 +17,7 @@
 #define MAX_INPUT_SIZE 1024ULL
 #define ISSUANCE_RATE 1000000000000LL
 #define MAX_AMOUNT (ISSUANCE_RATE * 1000ULL)
+#define MAX_SUPPLY (ISSUANCE_RATE * 200ULL)
 
 
 // If you want to use the network_meassges directory in your project without dependencies to other code,
