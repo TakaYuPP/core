@@ -245,19 +245,6 @@ public:
 
 protected:
 
-    struct StatsInfo
-    {
-        uint64 totalRevenue;
-        uint64 revenueOfQcapHolders;
-        uint64 revenueOfOneQcap;
-        uint64 revenueOfQvaultHolders;
-        uint64 revenueOfOneQvault;
-        uint64 revenueOfReinvesting;
-        uint64 revenueOfDevTeam;
-    };
-
-    array<StatsInfo, QVAULT_MAX_EPOCHS> _allEpochStats;
-
     id QCAP_ISSUER;
     id authAddress1, authAddress2, authAddress3, newAuthAddress1, newAuthAddress2, newAuthAddress3;
     id reinvestingAddress, newReinvestingAddress1, newReinvestingAddress2, newReinvestingAddress3;
@@ -270,6 +257,19 @@ protected:
     uint32 newQCAPHolderPermille1, newReinvestingPermille1, newDevPermille1;
     uint32 newQCAPHolderPermille2, newReinvestingPermille2, newDevPermille2;
     uint32 newQCAPHolderPermille3, newReinvestingPermille3, newDevPermille3;
+
+    struct StatsInfo
+    {
+        uint64 totalRevenue;
+        uint64 revenueOfQcapHolders;
+        uint64 revenueOfOneQcap;
+        uint64 revenueOfQvaultHolders;
+        uint64 revenueOfOneQvault;
+        uint64 revenueOfReinvesting;
+        uint64 revenueOfDevTeam;
+    };
+
+    array<StatsInfo, QVAULT_MAX_EPOCHS> _allEpochStats;
 
     PUBLIC_PROCEDURE(submitAuthAddress)
 
