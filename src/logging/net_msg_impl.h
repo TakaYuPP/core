@@ -72,13 +72,22 @@ void qLogger::processRequestTxLogInfo(Peer* peer, RequestResponseHeader* header)
         && request->passcode[2] == logReaderPasscodes[2]
         && request->passcode[3] == logReaderPasscodes[3]
         && request->tick < system.tick
-        && request->tick >= system.initialTick
+        && request->tick >= tickBegin
         )
     {
         ResponseLogIdRangeFromTx resp;
-        BlobInfo info = tx.getLogIdInfo(request->tick, request->txId);
-        resp.fromLogId = info.startIndex;
-        resp.length = info.length;
+        if (request->tick < tickLoadedFrom)
+        {
+            // unknown logging because the whole node memory is loaded from files
+            resp.fromLogId = -2;
+            resp.length = -2;            
+        } 
+        else
+        {
+            BlobInfo info = tx.getLogIdInfo(request->tick, request->txId);
+            resp.fromLogId = info.startIndex;
+            resp.length = info.length;            
+        }
         enqueueResponse(peer, sizeof(ResponseLogIdRangeFromTx), ResponseLogIdRangeFromTx::type, header->dejavu(), &resp);
         return;
     }
@@ -95,17 +104,29 @@ void qLogger::processRequestTickTxLogInfo(Peer* peer, RequestResponseHeader* hea
         && request->passcode[2] == logReaderPasscodes[2]
         && request->passcode[3] == logReaderPasscodes[3]
         && request->tick < system.tick
-        && request->tick >= system.initialTick
+        && request->tick >= tickBegin
         )
     {
         ResponseAllLogIdRangesFromTick resp;
         int txId = 0;
-        for (txId = 0; txId < LOG_TX_PER_TICK; txId++)
+        if (request->tick < tickLoadedFrom)
         {
-            BlobInfo info = tx.getLogIdInfo(request->tick, txId);
-            resp.fromLogId[txId] = info.startIndex;
-            resp.length[txId] = info.length;
+            // unknown logging because the whole node memory is loaded from files
+            for (txId = 0; txId < LOG_TX_PER_TICK; txId++)
+            {
+                resp.fromLogId[txId] = -2;
+                resp.length[txId] = -2;
+            }
         }
+        else
+        {
+            for (txId = 0; txId < LOG_TX_PER_TICK; txId++)
+            {
+                BlobInfo info = tx.getLogIdInfo(request->tick, txId);
+                resp.fromLogId[txId] = info.startIndex;
+                resp.length[txId] = info.length;
+            }            
+        }        
         enqueueResponse(peer, sizeof(ResponseAllLogIdRangesFromTick), ResponseAllLogIdRangesFromTick::type, header->dejavu(), &resp);
         return;
     }
