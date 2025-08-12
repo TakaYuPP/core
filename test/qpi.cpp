@@ -14,13 +14,13 @@
 #include "../src/contract_core/qpi_proposal_voting.h"
 #include "../src/contract_core/qpi_system_impl.h"
 
-
 // changing offset simulates changed computor set with changed epoch
-static int computorIdOffset = 0;
-
-QPI::id QPI::QpiContextFunctionCall::computor(unsigned short computorIndex) const
+void initComputors(unsigned short computorIdOffset)
 {
-    return QPI::id(computorIndex + computorIdOffset, 9, 8, 7);
+    for (unsigned short computorIndex = 0; computorIndex < NUMBER_OF_COMPUTORS; ++computorIndex)
+    {
+        broadcastedComputors.computors.publicKeys[computorIndex] = QPI::id(computorIndex + computorIdOffset, 9, 8, 7);
+    }
 }
 
 
@@ -28,7 +28,7 @@ TEST(TestCoreQPI, Array)
 {
     //QPI::array<int, 0> mustFail; // should raise compile error
 
-    QPI::array<QPI::uint8, 4> uint8_4;
+    QPI::Array<QPI::uint8, 4> uint8_4;
     EXPECT_EQ(uint8_4.capacity(), 4);
     //uint8_4.setMem(QPI::id(1, 2, 3, 4)); // should raise compile error
     uint8_4.setAll(2);
@@ -58,13 +58,13 @@ TEST(TestCoreQPI, Array)
     EXPECT_TRUE(isArraySorted(uint8_4));
     EXPECT_TRUE(isArraySortedWithoutDuplicates(uint8_4));
 
-    QPI::array<QPI::uint64, 4> uint64_4;
+    QPI::Array<QPI::uint64, 4> uint64_4;
     uint64_4.setMem(QPI::id(101, 102, 103, 104));
     for (int i = 0; i < uint64_4.capacity(); ++i)
         EXPECT_EQ(uint64_4.get(i), i + 101);
     //uint64_4.setMem(uint8_4); // should raise compile error
 
-    QPI::array<QPI::uint16, 2> uint16_2;
+    QPI::Array<QPI::uint16, 2> uint16_2;
     EXPECT_EQ(uint8_4.capacity(), 4);
     //uint16_2.setMem(QPI::id(1, 2, 3, 4)); // should raise compile error
     uint16_2.setAll(12345);
@@ -81,9 +81,9 @@ TEST(TestCoreQPI, Array)
 
 TEST(TestCoreQPI, BitArray)
 {
-    //QPI::bit_array<0> mustFail;
+    //QPI::BitArray<0> mustFail;
 
-    QPI::bit_array<1> b1;
+    QPI::BitArray<1> b1;
     EXPECT_EQ(b1.capacity(), 1);
     b1.setAll(0);
     EXPECT_EQ(b1.get(0), 0);
@@ -98,7 +98,16 @@ TEST(TestCoreQPI, BitArray)
     b1.set(0, true);
     EXPECT_EQ(b1.get(0), 1);
 
-    QPI::bit_array<64> b64;
+    b1.setAll(0);
+    QPI::BitArray<1> b1_2;
+    b1_2.setAll(0);
+    QPI::BitArray<1> b1_3;
+    b1_3.setAll(1);
+    EXPECT_TRUE(b1 == b1_2);
+    EXPECT_TRUE(b1 != b1_3);
+    EXPECT_FALSE(b1 == b1_3);
+
+    QPI::BitArray<64> b64;
     EXPECT_EQ(b64.capacity(), 64);
     b64.setMem(0x11llu);
     EXPECT_EQ(b64.get(0), 1);
@@ -109,7 +118,7 @@ TEST(TestCoreQPI, BitArray)
     EXPECT_EQ(b64.get(5), 0);
     EXPECT_EQ(b64.get(6), 0);
     EXPECT_EQ(b64.get(7), 0);
-    QPI::array<QPI::uint64, 1> llu1;
+    QPI::Array<QPI::uint64, 1> llu1;
     llu1.setMem(b64);
     EXPECT_EQ(llu1.get(0), 0x11llu);
     b64.setAll(0);
@@ -119,11 +128,23 @@ TEST(TestCoreQPI, BitArray)
     llu1.setMem(b64);
     EXPECT_EQ(llu1.get(0), 0xffffffffffffffffllu);
 
-    //QPI::bit_array<96> b96; // must trigger compile error
 
-    QPI::bit_array<128> b128;
+    b64.setMem(0x11llu);
+    QPI::BitArray<64> b64_2;
+    EXPECT_EQ(b64.capacity(), 64);
+    b64_2.setMem(0x11llu);
+    QPI::BitArray<64> b64_3;
+    EXPECT_EQ(b64.capacity(), 64);
+    b64_3.setMem(0x55llu);
+    EXPECT_TRUE(b64 == b64_2);
+    EXPECT_TRUE(b64 != b64_3);
+    EXPECT_FALSE(b64 == b64_3);
+
+    //QPI::BitArray<96> b96; // must trigger compile error
+
+    QPI::BitArray<128> b128;
     EXPECT_EQ(b128.capacity(), 128);
-    QPI::array<QPI::uint64, 2> llu2;
+    QPI::Array<QPI::uint64, 2> llu2;
     llu2.setAll(0x4llu);
     EXPECT_EQ(llu2.get(0), 0x4llu);
     EXPECT_EQ(llu2.get(1), 0x4llu);
@@ -152,6 +173,15 @@ TEST(TestCoreQPI, BitArray)
     {
         EXPECT_EQ(b128.get(i), i % 2 == 0);
     }
+
+    b128.setAll(1);
+    QPI::BitArray<128> b128_2;
+    QPI::BitArray<128> b128_3;
+    b128_2.setAll(1);
+    b128_3.setAll(0);
+    EXPECT_TRUE(b128 == b128_2);
+    EXPECT_TRUE(b128 != b128_3);
+    EXPECT_FALSE(b128 == b128_3);
 }
 
 TEST(TestCoreQPI, Div) {
@@ -203,10 +233,24 @@ TEST(TestCoreQPI, Mod) {
     EXPECT_EQ(QPI::mod(2, -1), 0);
 }
 
+struct ContractExecInitDeinitGuard
+{
+    ContractExecInitDeinitGuard()
+    {
+        EXPECT_TRUE(initContractExec());
+    }
+    ~ContractExecInitDeinitGuard()
+    {
+        deinitContractExec();
+    }
+};
+
 TEST(TestCoreQPI, ProposalAndVotingByComputors)
 {
+    ContractExecInitDeinitGuard initDeinitGuard;
     QpiContextUserProcedureCall qpi(0, QPI::id(1, 2, 3, 4), 123);
     QPI::ProposalAndVotingByComputors pv;
+    initComputors(0);
 
     // Memory must be zeroed to work, which is done in contract states on init
     QPI::setMemory(pv, 0);
@@ -219,14 +263,17 @@ TEST(TestCoreQPI, ProposalAndVotingByComputors)
     }
     for (int i = NUMBER_OF_COMPUTORS; i < 800; ++i)
     {
-        EXPECT_EQ(pv.getVoterIndex(qpi, qpi.computor(i)), QPI::INVALID_VOTER_INDEX);
+        QPI::id testId(i, 9, 8, 7);
+        EXPECT_EQ(pv.getVoterIndex(qpi, testId), QPI::INVALID_VOTER_INDEX);
         EXPECT_EQ(pv.getVoterId(qpi, i), QPI::NULL_ID);
     }
     EXPECT_EQ(pv.getVoterIndex(qpi, qpi.originator()), QPI::INVALID_VOTER_INDEX);
 
     // valid proposers are computors
-    for (int i = 0; i < 2 * NUMBER_OF_COMPUTORS; ++i)
-        EXPECT_EQ(pv.isValidProposer(qpi, qpi.computor(i)), (i < NUMBER_OF_COMPUTORS));
+    for (int i = 0; i < NUMBER_OF_COMPUTORS; ++i)
+        EXPECT_TRUE(pv.isValidProposer(qpi, qpi.computor(i)));
+    for (int i = NUMBER_OF_COMPUTORS; i < 2 * NUMBER_OF_COMPUTORS; ++i)
+        EXPECT_FALSE(pv.isValidProposer(qpi, QPI::id(i, 9, 8, 7)));
     EXPECT_FALSE(pv.isValidProposer(qpi, QPI::NULL_ID));
     EXPECT_FALSE(pv.isValidProposer(qpi, qpi.originator()));
 
@@ -369,6 +416,21 @@ void testProposalWithAllVoteData()
     proposal.transfer.amounts.set(3, 1234567);
     testProposalWithAllVoteDataOptionVotes(pwav, proposal, 5);
 
+    // TransferInEpochYesNo proposal
+    proposal.type = QPI::ProposalTypes::TransferInEpochYesNo;
+    proposal.transferInEpoch.destination = QPI::id(1, 2, 3, 4);
+    proposal.transferInEpoch.amount = 10;
+    proposal.transferInEpoch.targetEpoch = 123;
+    testProposalWithAllVoteDataOptionVotes(pwav, proposal, 2);
+
+    // fail: test TransferInEpoch proposal with too many or too few options
+    proposal.type = QPI::ProposalTypes::type(QPI::ProposalTypes::Class::TransferInEpoch, 1);
+    EXPECT_FALSE(QPI::ProposalTypes::isValid(proposal.type));
+    EXPECT_FALSE(proposal.checkValidity());
+    proposal.type = QPI::ProposalTypes::type(QPI::ProposalTypes::Class::TransferInEpoch, 3);
+    EXPECT_FALSE(QPI::ProposalTypes::isValid(proposal.type));
+    EXPECT_FALSE(proposal.checkValidity());
+
     // VariableYesNo proposal
     proposal.type = QPI::ProposalTypes::VariableYesNo;
     proposal.variableOptions.variable = 42;
@@ -429,6 +491,7 @@ TEST(TestCoreQPI, ProposalWithAllVoteDataWithoutScalarVoteSupport)
 
 TEST(TestCoreQPI, ProposalWithAllVoteDataYesNoProposals)
 {
+    ContractExecInitDeinitGuard initDeinitGuard;
     typedef QPI::ProposalDataYesNo ProposalT;
     QPI::ProposalWithAllVoteData<ProposalT, 42> pwav;
     ProposalT proposal;
@@ -461,6 +524,10 @@ TEST(TestCoreQPI, ProposalWithAllVoteDataYesNoProposals)
 
     // TransferThreeAmounts
     proposal.type = QPI::ProposalTypes::TransferThreeAmounts;
+    EXPECT_FALSE(proposal.checkValidity());
+
+    // fail: TransferInEpochYesNo proposal not supported due to lack of storage
+    proposal.type = QPI::ProposalTypes::TransferInEpochYesNo;
     EXPECT_FALSE(proposal.checkValidity());
 
     // VariableYesNo proposal
@@ -537,13 +604,19 @@ template <typename ProposalVotingType, typename ProposalDataType>
 void setProposalWithSuccessCheck(const QPI::QpiContextProcedureCall& qpi, const ProposalVotingType& pv, const QPI::id& proposerId, const ProposalDataType& proposal)
 {
     ProposalDataType proposalReturned;
-    EXPECT_TRUE(qpi(*pv).setProposal(proposerId, proposal));
+    EXPECT_NE((int)qpi(*pv).setProposal(proposerId, proposal), (int)QPI::INVALID_PROPOSAL_INDEX);
     QPI::uint16 proposalIdx = qpi(*pv).proposalIndex(proposerId);
     EXPECT_NE((int)proposalIdx, (int)QPI::INVALID_PROPOSAL_INDEX);
     EXPECT_EQ(qpi(*pv).proposerId(proposalIdx), proposerId);
     EXPECT_TRUE(qpi(*pv).getProposal(proposalIdx, proposalReturned));
     EXPECT_TRUE(isReturnedProposalAsExpected(qpi, proposalReturned, proposal));
     expectNoVotes(qpi, pv, proposalIdx);
+}
+
+template <typename ProposalVotingType, typename ProposalDataType>
+void setProposalExpectFailure(const QPI::QpiContextProcedureCall& qpi, const ProposalVotingType& pv, const QPI::id& proposerId, const ProposalDataType& proposal)
+{
+    EXPECT_EQ((int)qpi(*pv).setProposal(proposerId, proposal), (int)QPI::INVALID_PROPOSAL_INDEX);
 }
 
 template <bool successExpected, typename ProposalVotingType>
@@ -639,8 +712,11 @@ int countFinishedProposals(
 template <bool supportScalarVotes, bool proposalByComputorsOnly>
 void testProposalVotingV1()
 {
+    ContractExecInitDeinitGuard initDeinitGuard;
+
     system.tick = 123456789;
     system.epoch = 12345;
+    initComputors(0);
 
     typedef std::conditional<
         proposalByComputorsOnly,
@@ -750,7 +826,7 @@ void testProposalVotingV1()
     if (proposalByComputorsOnly)
     {
         // fail: originator id(1,2,3,4) is no computor (see custom qpi.computor() above)
-        EXPECT_FALSE(qpi(*pv).setProposal(qpi.originator(), proposal));
+        setProposalExpectFailure(qpi, pv, qpi.originator(), proposal);
     }
     else
     {
@@ -772,15 +848,15 @@ void testProposalVotingV1()
     // fail: invalid type (more options than supported)
     proposal.type = QPI::ProposalTypes::type(QPI::ProposalTypes::Class::GeneralOptions, 9);
     EXPECT_FALSE(QPI::ProposalTypes::isValid(proposal.type));
-    EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(1), proposal));
+    setProposalExpectFailure(qpi, pv, qpi.computor(1), proposal);
 
     // fail: invalid type (less options than supported)
     proposal.type = QPI::ProposalTypes::type(QPI::ProposalTypes::Class::GeneralOptions, 0);
     EXPECT_FALSE(QPI::ProposalTypes::isValid(proposal.type));
-    EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(1), proposal));
+    setProposalExpectFailure(qpi, pv, qpi.computor(1), proposal);
     proposal.type = QPI::ProposalTypes::type(QPI::ProposalTypes::Class::GeneralOptions, 1);
     EXPECT_FALSE(QPI::ProposalTypes::isValid(proposal.type));
-    EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(1), proposal));
+    setProposalExpectFailure(qpi, pv, qpi.computor(1), proposal);
 
     // okay: set proposal for computor 2 / other ID (proposal index 1, first use)
     QPI::id secondNonComputorId(12345, 6789, 987, 654);
@@ -823,7 +899,7 @@ void testProposalVotingV1()
     proposal.type = QPI::ProposalTypes::TransferYesNo;
     proposal.transfer.destination = QPI::NULL_ID;
     proposal.transfer.amounts.setAll(0);
-    EXPECT_FALSE(qpi(*pv).setProposal(secondProposer, proposal));
+    setProposalExpectFailure(qpi, pv, secondProposer, proposal);
     // check that overwrite did not work
     EXPECT_TRUE(qpi(*pv).getProposal(qpi(*pv).proposalIndex(secondProposer), proposalReturned));
     EXPECT_FALSE(isReturnedProposalAsExpected(qpi, proposalReturned, proposal));
@@ -831,19 +907,19 @@ void testProposalVotingV1()
     // fail: proposal of transfer with too many or too few options
     proposal.type = QPI::ProposalTypes::type(QPI::ProposalTypes::Class::Transfer, 0);
     EXPECT_FALSE(QPI::ProposalTypes::isValid(proposal.type));
-    EXPECT_FALSE(qpi(*pv).setProposal(secondProposer, proposal));
+    setProposalExpectFailure(qpi, pv, secondProposer, proposal);
     proposal.type = QPI::ProposalTypes::type(QPI::ProposalTypes::Class::Transfer, 1);
     EXPECT_FALSE(QPI::ProposalTypes::isValid(proposal.type));
-    EXPECT_FALSE(qpi(*pv).setProposal(secondProposer, proposal));
+    setProposalExpectFailure(qpi, pv, secondProposer, proposal);
     proposal.type = QPI::ProposalTypes::type(QPI::ProposalTypes::Class::Transfer, 6);
     EXPECT_FALSE(QPI::ProposalTypes::isValid(proposal.type));
-    EXPECT_FALSE(qpi(*pv).setProposal(secondProposer, proposal));
+    setProposalExpectFailure(qpi, pv, secondProposer, proposal);
 
     // fail: proposal of revenue distribution with invalid amount
     proposal.type = QPI::ProposalTypes::TransferYesNo;
     proposal.transfer.destination = qpi.originator();
     proposal.transfer.amounts.set(0, -123456);
-    EXPECT_FALSE(qpi(*pv).setProposal(secondProposer, proposal));
+    setProposalExpectFailure(qpi, pv, secondProposer, proposal);
 
     // okay: revenue distribution, overwrite existing proposal of comp 2 (proposal index 1, reused)
     proposal.transfer.destination = qpi.originator();
@@ -878,7 +954,7 @@ void testProposalVotingV1()
     {
         // fail: scalar proposal not supported
         proposal.type = QPI::ProposalTypes::VariableScalarMean;
-        EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(1), proposal));
+        setProposalExpectFailure(qpi, pv, qpi.computor(1), proposal);
     }
     else
     {
@@ -888,15 +964,15 @@ void testProposalVotingV1()
         proposal.variableScalar.minValue = 11;
         proposal.variableScalar.maxValue = 20;
         proposal.variableScalar.variable = 123; // not checked, full range usable
-        EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(1), proposal));
+        setProposalExpectFailure(qpi, pv, qpi.computor(1), proposal);
         proposal.variableScalar.minValue = 0;
         proposal.variableScalar.maxValue = 9;
-        EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(1), proposal));
+        setProposalExpectFailure(qpi, pv, qpi.computor(1), proposal);
 
         // fail: scalar proposal with full range is invalid, because NO_VOTE_VALUE is reserved for no vote
         proposal.variableScalar.minValue = proposal.variableScalar.minSupportedValue - 1;
         proposal.variableScalar.maxValue = proposal.variableScalar.maxSupportedValue;
-        EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(1), proposal));
+        setProposalExpectFailure(qpi, pv, qpi.computor(1), proposal);
 
         // okay: scalar proposal with nearly full range
         proposal.variableScalar.minValue = proposal.variableScalar.minSupportedValue;
@@ -974,22 +1050,22 @@ void testProposalVotingV1()
     {
         proposal.transfer.amounts.setAll(0);
         proposal.transfer.amounts.set(i, -100 * i - 1);
-        EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(1), proposal));
+        setProposalExpectFailure(qpi, pv, qpi.computor(1), proposal);
     }
     proposal.transfer.amounts.set(0, 0);
     proposal.transfer.amounts.set(1, 10);
     proposal.transfer.amounts.set(2, 20);
     proposal.transfer.amounts.set(3, 100); // for ProposalTypes::TransferThreeAmounts, fourth must be 0
-    EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(1), proposal));
+    setProposalExpectFailure(qpi, pv, qpi.computor(1), proposal);
 
     // fail: duplicate options
     proposal.transfer.amounts.setAll(0);
-    EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(1), proposal));
+    setProposalExpectFailure(qpi, pv, qpi.computor(1), proposal);
 
     // fail: options not sorted
     for (int i = 0; i < 3; ++i)
         proposal.transfer.amounts.set(i, 100 - i);
-    EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(1), proposal));
+    setProposalExpectFailure(qpi, pv, qpi.computor(1), proposal);
 
     // okay: fill proposal storage
     proposal.transfer.amounts.setAll(0);
@@ -1005,7 +1081,7 @@ void testProposalVotingV1()
     EXPECT_EQ(qpi(*pv).nextFinishedProposalIndex(-1), -1);
 
     // fail: no space left
-    EXPECT_FALSE(qpi(*pv).setProposal(qpi.computor(pv->maxProposals), proposal));
+    setProposalExpectFailure(qpi, pv, qpi.computor(pv->maxProposals), proposal);
 
     // cast some votes before epoch change to test querying voting summary afterwards
     for (int i = 0; i < 20; ++i)
@@ -1049,15 +1125,15 @@ void testProposalVotingV1()
     EXPECT_EQ(countActiveProposals(qpi, pv), 1);
     EXPECT_EQ(countFinishedProposals(qpi, pv), (int)pv->maxProposals - 2);
     proposal.epoch = 0;
-    EXPECT_FALSE(qpi(*pv).setProposal(qpi.originator(), proposal));
-    EXPECT_TRUE(qpi(*pv).setProposal(qpi.computor(7), proposal));
+    setProposalExpectFailure(qpi, pv, qpi.originator(), proposal);
+    EXPECT_NE((int)qpi(*pv).setProposal(qpi.computor(7), proposal), (int)QPI::INVALID_PROPOSAL_INDEX); // success
     EXPECT_EQ((int)qpi(*pv).proposalIndex(qpi.computor(7)), (int)QPI::INVALID_PROPOSAL_INDEX);
     EXPECT_EQ(countActiveProposals(qpi, pv), 1);
     EXPECT_EQ(countFinishedProposals(qpi, pv), (int)pv->maxProposals - 3);
 
     // simulate epoch change with changes in computors
     ++system.epoch;
-    computorIdOffset += 100;
+    initComputors(100);
     EXPECT_EQ(countActiveProposals(qpi, pv), 0);
     EXPECT_EQ(countFinishedProposals(qpi, pv), (int)pv->maxProposals - 2);
 

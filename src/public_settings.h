@@ -9,7 +9,7 @@
 // random seed is now obtained from spectrumDigests
 
 #define MAX_NUMBER_OF_PROCESSORS 32
-#define NUMBER_OF_SOLUTION_PROCESSORS 12 // do not increase this, because there may be issues due to too fast ticking
+#define NUMBER_OF_SOLUTION_PROCESSORS 12
 
 // Number of buffers available for executing contract functions in parallel; having more means reserving a bit more RAM (+1 = +32 MB)
 // and less waiting in request processors if there are more parallel contract function requests. The maximum value that may make sense
@@ -23,8 +23,8 @@
 // Number of ticks from prior epoch that are kept after seamless epoch transition. These can be requested after transition.
 #define TICKS_TO_KEEP_FROM_PRIOR_EPOCH 100
 
-#define TARGET_TICK_DURATION 1500
-#define TRANSACTION_SPARSENESS 2
+#define TARGET_TICK_DURATION 1000
+#define TRANSACTION_SPARSENESS 1
 
 // Below are 2 variables that are used for auto-F5 feature:
 #define AUTO_FORCE_NEXT_TICK_THRESHOLD 0ULL // Multiplier of TARGET_TICK_DURATION for the system to detect "F5 case" | set to 0 to disable
@@ -35,12 +35,19 @@
 #define PROBABILITY_TO_FORCE_EMPTY_TICK 800 // after (AUTO_FORCE_NEXT_TICK_THRESHOLD x TARGET_TICK_DURATION) seconds, the node will start casting F5 randomly every second with this probability
                                             // to prevent bad actor causing misalignment, operators should set this number in this range [700, 900] (aka [7%, 9%])
 
-
+#define NEXT_TICK_TIMEOUT_THRESHOLD 5ULL // Multiplier of TARGET_TICK_DURATION for the system to discard next tick in tickData.
+                                         // This will lead to zero `expectedNextTickTransactionDigest` in consensus
+             
+#define PEER_REFRESHING_PERIOD 120000ULL
+#if AUTO_FORCE_NEXT_TICK_THRESHOLD != 0
+static_assert(NEXT_TICK_TIMEOUT_THRESHOLD < AUTO_FORCE_NEXT_TICK_THRESHOLD, "Timeout threshold must be smaller than auto F5 threshold");
+static_assert(AUTO_FORCE_NEXT_TICK_THRESHOLD* TARGET_TICK_DURATION >= PEER_REFRESHING_PERIOD, "AutoF5 threshold must be greater than PEER_REFRESHING_PERIOD");
+#endif
 // Set START_NETWORK_FROM_SCRATCH to 0 if you start the node for syncing with the already ticking network.
 // If this flag is 1, it indicates that the whole network (all 676 IDs) will start from scratch and agree that the very first tick time will be set at (2022-04-13 Wed 12:00:00.000UTC).
 // If this flag is 0, the node will try to fetch data of the initial tick of the epoch from other nodes, because the tick's timestamp may differ from (2022-04-13 Wed 12:00:00.000UTC).
 // If you restart your node after seamless epoch transition, make sure EPOCH and TICK are set correctly for the currently running epoch.
-#define START_NETWORK_FROM_SCRATCH 0
+#define START_NETWORK_FROM_SCRATCH 1
 
 // Addons: If you don't know it, leave it 0.
 #define ADDON_TX_STATUS_REQUEST 0
@@ -49,14 +56,16 @@
 // Config options that should NOT be changed by operators
 
 #define VERSION_A 1
-#define VERSION_B 225
-#define VERSION_C 3
+#define VERSION_B 255
+#define VERSION_C 0
 
 // Epoch and initial tick for node startup
-#define EPOCH 135
-#define TICK 17160956
+#define EPOCH 174
+#define TICK 31230000
+#define TICK_IS_FIRST_TICK_OF_EPOCH 1 // Set to 0 if the network is restarted during the EPOCH with a new initial TICK
 
 #define ARBITRATOR "AFZPUAIYVPNUYGJRQVLUKOPPVLHAZQTGLYAAUUNBXFTVTAMSBKQBLEIEPCVJ"
+#define DISPATCHER "XPXYKFLGSWRHRGAUKWFWVXCDVEYAPCPCNUTMUDWFGDYQCWZNJMWFZEEGCFFO"
 
 static unsigned short SYSTEM_FILE_NAME[] = L"system";
 static unsigned short SYSTEM_END_OF_EPOCH_FILE_NAME[] = L"system.eoe";
@@ -64,17 +73,23 @@ static unsigned short SPECTRUM_FILE_NAME[] = L"spectrum.???";
 static unsigned short UNIVERSE_FILE_NAME[] = L"universe.???";
 static unsigned short SCORE_CACHE_FILE_NAME[] = L"score.???";
 static unsigned short CONTRACT_FILE_NAME[] = L"contract????.???";
+static unsigned short CUSTOM_MINING_REVENUE_END_OF_EPOCH_FILE_NAME[] = L"custom_revenue.eoe";
+static unsigned short CUSTOM_MINING_CACHE_FILE_NAME[] = L"custom_mining_cache???.???";
+static unsigned short CUSTOM_MINING_V2_CACHE_FILE_NAME[] = L"custom_mining_v2_cache.???";
 
-static unsigned short REVENUE_FILE_NAME[] = L"revenueScore"; // TODO: for testing purpose, will delete at epoch 111
-
-#define DATA_LENGTH 256
-#define NUMBER_OF_HIDDEN_NEURONS 10000
-#define NUMBER_OF_NEIGHBOR_NEURONS 10000
-#define MAX_DURATION 100000000
-#define NEURON_VALUE_LIMIT 1LL
-#define SOLUTION_THRESHOLD_DEFAULT 45
+static constexpr unsigned long long NUMBER_OF_INPUT_NEURONS = 512;     // K
+static constexpr unsigned long long NUMBER_OF_OUTPUT_NEURONS = 512;    // L
+static constexpr unsigned long long NUMBER_OF_TICKS = 600;               // N
+static constexpr unsigned long long NUMBER_OF_NEIGHBORS = 728;    // 2M. Must be divided by 2
+static constexpr unsigned long long NUMBER_OF_MUTATIONS = 150;
+static constexpr unsigned long long POPULATION_THRESHOLD = NUMBER_OF_INPUT_NEURONS + NUMBER_OF_OUTPUT_NEURONS + NUMBER_OF_MUTATIONS; // P
+static constexpr long long NEURON_VALUE_LIMIT = 1LL;
+static constexpr unsigned int SOLUTION_THRESHOLD_DEFAULT = 321;
 
 #define SOLUTION_SECURITY_DEPOSIT 1000000
+
+// Signing difficulty
+#define TARGET_TICK_VOTE_SIGNATURE 0x00095CBEU // around 7000 signing operations per ID
 
 // include commonly needed definitions
 #include "network_messages/common_def.h"
@@ -85,6 +100,17 @@ static unsigned short REVENUE_FILE_NAME[] = L"revenueScore"; // TODO: for testin
 
 #define INTERNAL_COMPUTATIONS_INTERVAL 676
 #define EXTERNAL_COMPUTATIONS_INTERVAL (676 + 1)
+static_assert(INTERNAL_COMPUTATIONS_INTERVAL >= NUMBER_OF_COMPUTORS, "Internal computation phase needs to be at least equal NUMBER_OF_COMPUTORS");
+
+// List of start-end for full external computation times. The event must not be overlap.
+// Format is DoW-hh-mm-ss in hex format, total 4 bytes, each use 1 bytes
+// DoW: Day of the week 0: Sunday, 1 = Monday ...
+static unsigned long long gFullExternalComputationTimes[][2] =
+{
+    {0x040C0000ULL, 0x050C0000ULL}, // Thu 12:00:00 - Fri 12:00:00
+    {0x060C0000ULL, 0x000C0000ULL}, // Sat 12:00:00 - Sun 12:00:00
+    {0x010C0000ULL, 0x020C0000ULL}, // Mon 12:00:00 - Tue 12:00:00
+};
 
 #define STACK_SIZE 4194304
 #define TRACK_MAX_STACK_BUFFER_SIZE

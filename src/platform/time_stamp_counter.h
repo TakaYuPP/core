@@ -2,15 +2,19 @@
 // Given several assumptions such as no CPU seed change and no hibernating, it
 // can be used to measure run-time with low overhead.
 // See https://en.wikipedia.org/wiki/Time_Stamp_Counter
+// TSC of different processors may be out of sync.
 
 #pragma once
 
-#include <intrin.h>
+#include <lib/platform_common/qintrin.h>
 
+#include "global_var.h"
 #include "console_logging.h"
 
+#include <lib/platform_common/sleep.h>
+
 // frequency of CPU clock
-static unsigned long long frequency;
+GLOBAL_VAR_DECL unsigned long long frequency GLOBAL_VAR_INIT(0);
 
 
 static void initTimeStampCounter()
@@ -30,7 +34,7 @@ static void initTimeStampCounter()
     }
 
     frequency = __rdtsc();
-    bs->Stall(1000000);
+    sleepMilliseconds(1000);
     frequency = __rdtsc() - frequency;
     setText(message, L"Practical TSC frequency = ");
     appendNumber(message, frequency, TRUE);

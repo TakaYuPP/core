@@ -135,7 +135,7 @@ public:
     };
     struct getBetOptionDetail_output
     {
-        array<id, 1024> bettor;
+        Array<id, 1024> bettor;
     };
     struct getActiveBet_input
     {
@@ -143,7 +143,7 @@ public:
     struct getActiveBet_output
     {
         uint32 count;
-        array<uint32, 1024> activeBetId;
+        Array<uint32, 1024> activeBetId;
     };
     struct getBetByCreator_input
     {
@@ -152,7 +152,7 @@ public:
     struct getBetByCreator_output
     {
         uint32 count;
-        array<uint32, 1024> betId;
+        Array<uint32, 1024> betId;
     };
     struct cancelBet_input
     {
@@ -201,27 +201,27 @@ public:
     /**************************************/
     /************CONTRACT STATES***********/
     /**************************************/
-    array<uint32, QUOTTERY_MAX_BET> mBetID;
-    array<id, QUOTTERY_MAX_BET> mCreator;
-    array<id, QUOTTERY_MAX_BET> mBetDesc;
-    array<id, QUOTTERY_MAX_BET* QUOTTERY_MAX_OPTION> mOptionDesc;
-    array<uint64, QUOTTERY_MAX_BET> mBetAmountPerSlot;
-    array<uint32, QUOTTERY_MAX_BET> mMaxNumberOfBetSlotPerOption;
-    array<id, QUOTTERY_MAX_BET* QUOTTERY_MAX_ORACLE_PROVIDER> mOracleProvider;
-    array<uint32, QUOTTERY_MAX_BET* QUOTTERY_MAX_OPTION> mOracleFees;
-    array<uint32, QUOTTERY_MAX_BET* QUOTTERY_MAX_OPTION> mCurrentBetState;
-    array<uint8, QUOTTERY_MAX_BET> mNumberOption;
-    array<uint32, QUOTTERY_MAX_BET> mOpenDate;
-    array<uint32, QUOTTERY_MAX_BET> mCloseDate;
-    array<uint32, QUOTTERY_MAX_BET> mEndDate;
-    array<bit, QUOTTERY_MAX_BET> mIsOccupied;
-    array<uint32, QUOTTERY_MAX_BET> mBetEndTick;
+    Array<uint32, QUOTTERY_MAX_BET> mBetID;
+    Array<id, QUOTTERY_MAX_BET> mCreator;
+    Array<id, QUOTTERY_MAX_BET> mBetDesc;
+    Array<id, QUOTTERY_MAX_BET* QUOTTERY_MAX_OPTION> mOptionDesc;
+    Array<uint64, QUOTTERY_MAX_BET> mBetAmountPerSlot;
+    Array<uint32, QUOTTERY_MAX_BET> mMaxNumberOfBetSlotPerOption;
+    Array<id, QUOTTERY_MAX_BET* QUOTTERY_MAX_ORACLE_PROVIDER> mOracleProvider;
+    Array<uint32, QUOTTERY_MAX_BET* QUOTTERY_MAX_OPTION> mOracleFees;
+    Array<uint32, QUOTTERY_MAX_BET* QUOTTERY_MAX_OPTION> mCurrentBetState;
+    Array<uint8, QUOTTERY_MAX_BET> mNumberOption;
+    Array<uint32, QUOTTERY_MAX_BET> mOpenDate;
+    Array<uint32, QUOTTERY_MAX_BET> mCloseDate;
+    Array<uint32, QUOTTERY_MAX_BET> mEndDate;
+    Array<bit, QUOTTERY_MAX_BET> mIsOccupied;
+    Array<uint32, QUOTTERY_MAX_BET> mBetEndTick;
     //bettor info:
-    array<id, QUOTTERY_MAX_BET* QUOTTERY_MAX_SLOT_PER_OPTION_PER_BET* QUOTTERY_MAX_OPTION> mBettorID;
-    array<uint8, QUOTTERY_MAX_BET* QUOTTERY_MAX_SLOT_PER_OPTION_PER_BET* QUOTTERY_MAX_OPTION> mBettorBetOption;
+    Array<id, QUOTTERY_MAX_BET* QUOTTERY_MAX_SLOT_PER_OPTION_PER_BET* QUOTTERY_MAX_OPTION> mBettorID;
+    Array<uint8, QUOTTERY_MAX_BET* QUOTTERY_MAX_SLOT_PER_OPTION_PER_BET* QUOTTERY_MAX_OPTION> mBettorBetOption;
     // bet result:
-    array<sint8, QUOTTERY_MAX_BET* QUOTTERY_MAX_OPTION> mBetResultWonOption;
-    array<sint8, QUOTTERY_MAX_BET* QUOTTERY_MAX_OPTION> mBetResultOPId;
+    Array<sint8, QUOTTERY_MAX_BET* QUOTTERY_MAX_OPTION> mBetResultWonOption;
+    Array<sint8, QUOTTERY_MAX_BET* QUOTTERY_MAX_OPTION> mBetResultOPId;
 
     //static assert for developing:
     static_assert(sizeof(mBetID) == (sizeof(uint32) * QUOTTERY_MAX_BET), "bet id array");
@@ -409,6 +409,7 @@ public:
      * @param slotId
      */
     PRIVATE_PROCEDURE_WITH_LOCALS(cleanMemorySlot)
+    {
         state.mBetID.set(input.slotId, NULL_INDEX);
         state.mCreator.set(input.slotId, NULL_ID);
         state.mBetDesc.set(input.slotId, NULL_ID);
@@ -460,7 +461,7 @@ public:
                 state.mBetResultOPId.set(locals.baseId0 + locals.i0, (sint8)(NULL_INDEX));
             }
         }
-    _
+    }
 
     struct checkAndCleanMemorySlots_input
     {
@@ -479,6 +480,7 @@ public:
     * Scan through all memory slots and clean any expired bet (>100 ticks)
     */
     PRIVATE_PROCEDURE_WITH_LOCALS(checkAndCleanMemorySlots)
+    {
         for (locals.i = 0; locals.i < QUOTTERY_MAX_BET; locals.i++)
         {
             if ((state.mIsOccupied.get(locals.i) == 1) // if the bet is currently occupied
@@ -491,7 +493,7 @@ public:
                 cleanMemorySlot(qpi, state, locals._cleanMemorySlot_input, locals._cleanMemorySlot_output, locals.cms);
             }
         }
-    _
+    }
 
     /**
     * Try to finalize a bet when the system receive a result publication from a oracle provider
@@ -499,6 +501,7 @@ public:
     * @param betId, slotId
     */
     PRIVATE_PROCEDURE_WITH_LOCALS(tryFinalizeBet)
+    {
         locals.numberOP = 0;
         {
             locals.baseId0 = input.slotId * 8;
@@ -609,7 +612,7 @@ public:
             QuotteryLogger log{ 0,QuotteryLogInfo::notEnoughVote,0 };
             LOG_INFO(log);
         }
-    _
+    }
     /**************************************/
     /************VIEW FUNCTIONS************/
     /**************************************/
@@ -617,6 +620,7 @@ public:
      * @return feePerSlotPerDay, gameOperatorFee, shareholderFee, minBetSlotAmount, gameOperator
      */
     PUBLIC_FUNCTION(basicInfo)
+    {
         output.feePerSlotPerHour = state.mFeePerSlotPerHour;
         output.gameOperatorFee = state.mGameOperatorFee;
         output.shareholderFee = state.mShareHolderFee;
@@ -632,7 +636,7 @@ public:
         output.distributedAmount = state.mDistributedAmount;
         output.burnedAmount = state.mBurnedAmount;
         output.gameOperator = state.mGameOperatorId;
-    _
+    }
 
     struct getBetInfo_locals
     {
@@ -645,6 +649,7 @@ public:
      * @return meta data of a bet and its current state
      */
     PUBLIC_FUNCTION_WITH_LOCALS(getBetInfo)
+    {
         output.betId = NULL_INDEX;
         locals.slotId = NULL_INDEX;
         for (locals.i0 = 0; locals.i0 < QUOTTERY_MAX_BET; locals.i0++)
@@ -713,7 +718,7 @@ public:
                 output.betResultOPId.set(locals.i0, state.mBetResultOPId.get(locals.baseId0 + locals.i0));
             }
         }
-    _
+    }
 
     struct getBetOptionDetail_locals
     {
@@ -726,6 +731,7 @@ public:
      * @return a list of ID that bet on optionID of bet betID
      */
     PUBLIC_FUNCTION_WITH_LOCALS(getBetOptionDetail)
+    {
         for (locals.i0 = 0; locals.i0 < QUOTTERY_MAX_SLOT_PER_OPTION_PER_BET; locals.i0++)
         {
             output.bettor.set(locals.i0, NULL_ID);
@@ -761,7 +767,7 @@ public:
         {
             output.bettor.set(locals.i0, state.mBettorID.get(locals.baseId1 + locals.i0));
         }
-    _
+    }
 
     struct getActiveBet_locals
     {
@@ -771,6 +777,7 @@ public:
      * @return a list of active betID
      */
     PUBLIC_FUNCTION_WITH_LOCALS(getActiveBet)
+    {
         output.count = 0;
         for (locals.slotId = 0; locals.slotId < QUOTTERY_MAX_BET; locals.slotId++)
         {
@@ -783,7 +790,7 @@ public:
                 }
             }
         }
-    _
+    }
 
     struct getBetByCreator_locals
     {
@@ -794,6 +801,7 @@ public:
     * @return a list of active betID that created by creatorID
     */
     PUBLIC_FUNCTION_WITH_LOCALS(getBetByCreator)
+    {
         output.count = 0;
         for (locals.slotId = 0; locals.slotId < QUOTTERY_MAX_BET; locals.slotId++)
         {
@@ -809,7 +817,7 @@ public:
                 }
             }
         }
-    _
+    }
 
     /**************************************/
     /************CORE FUNCTIONS************/
@@ -845,6 +853,7 @@ public:
     };
 
     PUBLIC_PROCEDURE_WITH_LOCALS(issueBet)
+    {
         // only allow users to create bet
         if (qpi.invocator() != qpi.originator())
         {
@@ -991,7 +1000,7 @@ public:
                 }
             }
         }
-    _
+    }
 
     struct joinBet_locals
     {
@@ -1013,6 +1022,7 @@ public:
     * @param _placeHolder (4 bytes): for padding
     */
     PUBLIC_PROCEDURE_WITH_LOCALS(joinBet)
+    {
         // only allow users to join bet
         if (qpi.invocator() != qpi.originator())
         {
@@ -1117,7 +1127,7 @@ public:
             state.mCurrentBetState.set(locals.baseId0 + input.option, locals.currentState + locals.numberOfSlot);
         }
         // done
-    _
+    }
     
     struct publishResult_locals
     {
@@ -1138,6 +1148,7 @@ public:
     * @param option (4 bytes): winning option
     */
     PUBLIC_PROCEDURE_WITH_LOCALS(publishResult)
+    {
         // only allow users to publish result
         if (qpi.invocator() != qpi.originator())
         {
@@ -1250,7 +1261,7 @@ public:
             tryFinalizeBet(qpi, state, locals._tryFinalizeBet_input, locals._tryFinalizeBet_output, locals.tfb);
         }
 
-    _
+    }
 
     struct cancelBet_locals
     {
@@ -1271,6 +1282,7 @@ public:
     * @param betId (4 bytes)
     */
     PUBLIC_PROCEDURE_WITH_LOCALS(cancelBet)
+    {
         // game operator invocation only. In any case that oracle providers can't reach consensus or unable to broadcast result after a long period,         
         // all funds will be returned
         if (qpi.invocator() != state.mGameOperatorId)
@@ -1313,7 +1325,7 @@ public:
             return;
         }
 
-        diffDateInSecond(locals.curDate, locals.endDate, locals.i0, locals.u64_0, locals.u64_1, locals.duration);
+        diffDateInSecond(locals.endDate, locals.curDate, locals.i0, locals.u64_0, locals.u64_1, locals.duration);
         locals.duration = div(locals.duration, 3600ULL * 24);
         if (locals.duration < 2)
         {
@@ -1342,10 +1354,11 @@ public:
             locals._cleanMemorySlot_input.slotId = locals.slotId;
             cleanMemorySlot(qpi, state, locals._cleanMemorySlot_input, locals._cleanMemorySlot_output, locals.cms);
         }
-    _
+    }
 
         
-    REGISTER_USER_FUNCTIONS_AND_PROCEDURES
+    REGISTER_USER_FUNCTIONS_AND_PROCEDURES()
+    {
         REGISTER_USER_FUNCTION(basicInfo, 1);
         REGISTER_USER_FUNCTION(getBetInfo, 2);
         REGISTER_USER_FUNCTION(getBetOptionDetail, 3);
@@ -1356,18 +1369,20 @@ public:
         REGISTER_USER_PROCEDURE(joinBet, 2);
         REGISTER_USER_PROCEDURE(cancelBet, 3);
         REGISTER_USER_PROCEDURE(publishResult, 4);
-    _
+    }
 
-    BEGIN_EPOCH
+    BEGIN_EPOCH()
+    {
         state.mFeePerSlotPerHour = QUOTTERY_FEE_PER_SLOT_PER_HOUR;
         state.mMinAmountPerBetSlot = QUOTTERY_MIN_AMOUNT_PER_BET_SLOT_;
         state.mShareHolderFee = QUOTTERY_SHAREHOLDER_FEE_;
         state.mGameOperatorFee = QUOTTERY_GAME_OPERATOR_FEE_;
         state.mBurnFee = QUOTTERY_BURN_FEE_;
         state.mGameOperatorId = id(0x63a7317950fa8886ULL, 0x4dbdf78085364aa7ULL, 0x21c6ca41e95bfa65ULL, 0xcbc1886b3ea8e647ULL);
-    _
+    }
 
-    END_EPOCH
+    END_EPOCH()
+    {
         if ((div(state.mEarnedAmountForShareHolder - state.mPaidAmountForShareHolder, uint64(NUMBER_OF_COMPUTORS)) > 0) && (state.mEarnedAmountForShareHolder > state.mPaidAmountForShareHolder))
         {
             if (qpi.distributeDividends(div(state.mEarnedAmountForShareHolder - state.mPaidAmountForShareHolder, uint64(NUMBER_OF_COMPUTORS))))
@@ -1375,5 +1390,5 @@ public:
                 state.mPaidAmountForShareHolder += div(state.mEarnedAmountForShareHolder - state.mPaidAmountForShareHolder, uint64(NUMBER_OF_COMPUTORS)) * NUMBER_OF_COMPUTORS;
             }
         }
-    _
+    }
 };

@@ -19,12 +19,30 @@
     <ClCompile Include="kangaroo_twelve.cpp" />
     <ClCompile Include="contract_qearn.cpp" />
     <ClCompile Include="contract_qx.cpp" />
+    <ClCompile Include="contract_qswap.cpp" />
+    <ClCompile Include="contract_qvault.cpp" />
     <ClCompile Include="common_def.cpp" />
+    <ClCompile Include="assets.cpp" />
+    <ClCompile Include="contract_msvault.cpp" />
+    <ClCompile Include="contract_testex.cpp" />
+    <ClCompile Include="contract_qbay.cpp" />
+    <ClCompile Include="contract_nostromo.cpp" />
+    <ClCompile Include="file_io.cpp" />
+    <ClCompile Include="virtual_memory.cpp" />
+    <ClCompile Include="custom_mining.cpp" />
+    <ClCompile Include="contract_qutil.cpp" />
+    <ClCompile Include="revenue.cpp" />
+    <ClCompile Include="time.cpp" />
+    <ClCompile Include="contract_gqmprop.cpp" />
+    <ClCompile Include="qpi_date_time.cpp" />
+    <ClCompile Include="uint128.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="score_reference.h" />
     <ClInclude Include="score_params.h" />
     <ClInclude Include="contract_testing.h" />
+    <ClInclude Include="test_util.h" />
+    <ClInclude Include="logging_test.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

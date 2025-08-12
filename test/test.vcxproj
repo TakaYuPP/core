@@ -40,9 +40,10 @@
       <WarningLevel>Level3</WarningLevel>
       <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>../src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../src;$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
       <OpenMPSupport>true</OpenMPSupport>
+      <StringPooling>true</StringPooling>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -65,13 +66,17 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OpenMPSupport>true</OpenMPSupport>
-      <AdditionalIncludeDirectories>../src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../src;$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
+      <OmitFramePointers>true</OmitFramePointers>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /E /I /Y  "$(ProjectDir)data" "$(TargetDir)data"</Command>
@@ -90,13 +95,17 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <OpenMPSupport>true</OpenMPSupport>
-      <AdditionalIncludeDirectories>../src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../src;$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
+      <OmitFramePointers>true</OmitFramePointers>
+      <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
     </Link>
     <PostBuildEvent>
       <Command>xcopy /E /I /Y  "$(ProjectDir)data" "$(TargetDir)data"</Command>
@@ -104,19 +113,36 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="contract_testing.h" />
+    <ClInclude Include="logging_test.h" />
     <ClInclude Include="score_params.h" />
     <ClInclude Include="score_reference.h" />
+    <ClInclude Include="test_util.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="common_def.cpp" />
+    <ClCompile Include="contract_qswap.cpp" />
+    <ClCompile Include="uint128.cpp" />
+    <ClCompile Include="assets.cpp" />
     <ClCompile Include="contract_core.cpp" />
+    <ClCompile Include="contract_msvault.cpp" />
     <ClCompile Include="contract_qearn.cpp" />
+    <ClCompile Include="contract_qutil.cpp" />
     <ClCompile Include="contract_qx.cpp" />
+    <ClCompile Include="contract_qvault.cpp" />
+    <ClCompile Include="contract_testex.cpp" />
+    <ClCompile Include="contract_qbay.cpp" />
+    <ClCompile Include="contract_nostromo.cpp" />
+    <ClCompile Include="contract_gqmprop.cpp" />
+    <ClCompile Include="custom_mining.cpp" />
+    <ClCompile Include="file_io.cpp" />
     <ClCompile Include="qpi_collection.cpp" />
+    <ClCompile Include="qpi_date_time.cpp" />
     <ClCompile Include="qpi_hash_map.cpp" />
     <ClCompile Include="kangaroo_twelve.cpp" />
+    <ClCompile Include="revenue.cpp" />
     <ClCompile Include="spectrum.cpp" />
     <ClCompile Include="stdlib_impl.cpp" />
+    <ClCompile Include="time.cpp" />
     <ClCompile Include="tx_status_request.cpp" />
     <ClCompile Include="m256.cpp" />
     <ClCompile Include="math_lib.cpp" />
@@ -126,6 +152,7 @@
     <ClCompile Include="score.cpp" />
     <ClCompile Include="score_cache.cpp" />
     <ClCompile Include="tick_storage.cpp" />
+    <ClCompile Include="virtual_memory.cpp" />
     <ClCompile Include="vote_counter.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -133,6 +160,14 @@
   </ItemGroup>
   <ItemGroup>
     <MASM Include="..\src\platform\custom_stack.asm" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\lib\platform_common\platform_common.vcxproj">
+      <Project>{61270221-bd41-438e-8f74-48aec8c3f9a5}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\lib\platform_os\platform_os.vcxproj">
+      <Project>{88b4cda8-8248-44d0-848e-0e938a2aad6d}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

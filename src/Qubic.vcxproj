@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -23,24 +23,38 @@
     <ClInclude Include="assets\net_msg_impl.h" />
     <ClInclude Include="common_buffers.h" />
     <ClInclude Include="contracts\ComputorControlledFund.h" />
+    <ClInclude Include="contracts\Qswap.h" />
     <ClInclude Include="contracts\SupplyWatcher.h" />
     <ClInclude Include="contracts\EmptyTemplate.h" />
     <ClInclude Include="contracts\GeneralQuorumProposal.h" />
     <ClInclude Include="contracts\math_lib.h" />
+    <ClInclude Include="contracts\MsVault.h" />
     <ClInclude Include="contracts\MyLastMatch.h" />
     <ClInclude Include="contracts\qpi.h" />
     <ClInclude Include="contracts\Quottery.h" />
     <ClInclude Include="contracts\QUtil.h" />
     <ClInclude Include="contracts\Qx.h" />
     <ClInclude Include="contracts\Random.h" />
+    <ClInclude Include="contracts\Qearn.h" />
+    <ClInclude Include="contracts\QVAULT.h" />
+    <ClInclude Include="contracts\QBAY.h" />
+    <ClInclude Include="contracts\Nostromo.h" />
+    <ClInclude Include="contracts\TestExampleA.h" />
+    <ClInclude Include="contracts\TestExampleB.h" />
+    <ClInclude Include="contracts\TestExampleC.h" />
+    <ClInclude Include="contracts\TestExampleD.h" />
     <ClInclude Include="contract_core\contract_action_tracker.h" />
     <ClInclude Include="contract_core\contract_def.h" />
     <ClInclude Include="contract_core\contract_exec.h" />
+    <ClInclude Include="contract_core\ipo.h" />
     <ClInclude Include="contract_core\qpi_asset_impl.h" />
     <ClInclude Include="contract_core\qpi_collection_impl.h" />
+    <ClInclude Include="contract_core\qpi_ipo_impl.h" />
+    <ClInclude Include="contract_core\qpi_mining_impl.h" />
     <ClInclude Include="contract_core\qpi_spectrum_impl.h" />
     <ClInclude Include="contract_core\qpi_system_impl.h" />
     <ClInclude Include="contract_core\qpi_hash_map_impl.h" />
+    <ClInclude Include="contract_core\qpi_ticking_impl.h" />
     <ClInclude Include="contract_core\qpi_trivial_impl.h" />
     <ClInclude Include="contract_core\stack_buffer.h" />
     <ClInclude Include="contract_core\qpi_proposal_voting.h" />
@@ -57,8 +71,10 @@
     <ClInclude Include="network_messages\common_response.h" />
     <ClInclude Include="network_messages\computors.h" />
     <ClInclude Include="network_messages\contract.h" />
+    <ClInclude Include="network_messages\custom_mining.h" />
     <ClInclude Include="network_messages\entity.h" />
     <ClInclude Include="network_messages\header.h" />
+    <ClInclude Include="network_messages\logging.h" />
     <ClInclude Include="network_messages\public_peers.h" />
     <ClInclude Include="network_messages\special_command.h" />
     <ClInclude Include="network_messages\system_info.h" />
@@ -70,28 +86,36 @@
     <ClInclude Include="platform\concurrency.h" />
     <ClInclude Include="four_q.h" />
     <ClInclude Include="kangaroo_twelve.h" />
+    <ClInclude Include="K12/kangaroo_twelve_xkcp.h" />
+    <ClInclude Include="platform\concurrency_impl.h" />
     <ClInclude Include="platform\custom_stack.h" />
     <ClInclude Include="platform\debugging.h" />
     <ClInclude Include="platform\file_io.h" />
     <ClInclude Include="platform\console_logging.h" />
     <ClInclude Include="platform\common_types.h" />
+    <ClInclude Include="platform\profiling.h" />
     <ClInclude Include="platform\random.h" />
     <ClInclude Include="platform\read_write_lock.h" />
     <ClInclude Include="platform\stack_size_tracker.h" />
+    <ClInclude Include="platform\uint128.h" />
     <ClInclude Include="platform\time_stamp_counter.h" />
     <ClInclude Include="platform\global_var.h" />
+    <ClInclude Include="platform\virtual_memory.h" />
+    <ClInclude Include="revenue.h" />
     <ClInclude Include="score.h" />
     <ClInclude Include="platform\m256.h" />
     <ClInclude Include="platform\memory.h" />
+    <ClInclude Include="platform\memory-util.h" />
     <ClInclude Include="score_cache.h" />
-    <ClInclude Include="spectrum.h" />
+    <ClInclude Include="spectrum\special_entities.h" />
+    <ClInclude Include="spectrum\spectrum.h" />
     <ClInclude Include="system.h" />
     <ClInclude Include="text_output.h" />
     <ClInclude Include="private_settings.h" />
     <ClInclude Include="public_settings.h" />
     <ClInclude Include="platform\time.h" />
-    <ClInclude Include="platform\uefi.h" />
-    <ClInclude Include="tick_storage.h" />
+    <ClInclude Include="ticking\ticking.h" />
+    <ClInclude Include="ticking\tick_storage.h" />
     <ClInclude Include="vote_counter.h" />
   </ItemGroup>
   <ItemGroup>
@@ -101,6 +125,14 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseAVX512|x64'">false</ExcludedFromBuild>
       <FileType>Document</FileType>
     </MASM>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\lib\platform_common\platform_common.vcxproj">
+      <Project>{61270221-bd41-438e-8f74-48aec8c3f9a5}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\lib\platform_efi\platform_efi.vcxproj">
+      <Project>{e8755f8f-3ad0-435a-992a-b05dcc188f6f}</Project>
+    </ProjectReference>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
@@ -193,7 +225,8 @@
       <GuardEHContMetadata>false</GuardEHContMetadata>
       <AssemblerOutput>All</AssemblerOutput>
       <AssemblerListingLocation>$(IntDir)Qubic.asm</AssemblerListingLocation>
-      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
     </ClCompile>
     <Link>
       <SubSystem>EFI Application</SubSystem>
@@ -207,7 +240,7 @@
       <DataExecutionPrevention>false</DataExecutionPrevention>
       <StackReserveSize>131072</StackReserveSize>
       <StackCommitSize>131072</StackCommitSize>
-      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseAVX512|x64'">
@@ -241,7 +274,8 @@
       <GuardEHContMetadata>false</GuardEHContMetadata>
       <AssemblerOutput>All</AssemblerOutput>
       <AssemblerListingLocation>$(IntDir)Qubic.asm</AssemblerListingLocation>
-      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
     </ClCompile>
     <Link>
       <SubSystem>EFI Application</SubSystem>
@@ -256,7 +290,7 @@
       <DataExecutionPrevention>false</DataExecutionPrevention>
       <StackReserveSize>131072</StackReserveSize>
       <StackCommitSize>131072</StackCommitSize>
-      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -290,7 +324,8 @@
       <GuardEHContMetadata>false</GuardEHContMetadata>
       <AssemblerOutput>All</AssemblerOutput>
       <AssemblerListingLocation>$(IntDir)Qubic.asm</AssemblerListingLocation>
-      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory);$(MSBuildProjectDirectory)\..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <WholeProgramOptimization>false</WholeProgramOptimization>
     </ClCompile>
     <Link>
       <SubSystem>EFI Application</SubSystem>
@@ -305,7 +340,7 @@
       <DataExecutionPrevention>false</DataExecutionPrevention>
       <StackReserveSize>131072</StackReserveSize>
       <StackCommitSize>131072</StackCommitSize>
-      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

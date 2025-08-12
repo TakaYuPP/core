@@ -1,7 +1,8 @@
 #pragma once
 
-#include <intrin.h>
+#include <lib/platform_common/qintrin.h>
 #include "debugging.h"
+#include "concurrency.h"
 
 // Lock that allows multiple readers but only one writer.
 // Priorizes writers, that is, additional readers can only gain access if no writer is waiting.
@@ -28,8 +29,7 @@ public:
         ASSERT(writersWaiting >= 0);
 
         // Wait until getting read access
-        while (!tryAcquireRead())
-            _mm_pause();
+        WAIT_WHILE(!tryAcquireRead());
     }
 
     // Try to aquire lock for reading without waiting. Return true if lock has been acquired.
@@ -91,8 +91,7 @@ public:
         _InterlockedIncrement(&writersWaiting);
 
         // Wait until getting write access
-        while (!tryAcquireWrite())
-            _mm_pause();
+        WAIT_WHILE(!tryAcquireWrite());
 
         // Writer got access -> decrement counter of writers waiting for access
         _InterlockedDecrement(&writersWaiting);
@@ -124,6 +123,22 @@ public:
         ASSERT(readers == -1);
         ASSERT(writersWaiting >= 0);
         readers = 0;
+    }
+
+    // Return if currently locked for writing. Note that the status may change any time.
+    bool isLockedForWriting() const
+    {
+        ASSERT(readers >= -1);
+        ASSERT(writersWaiting >= 0);
+        return readers == -1;
+    }
+
+    // Return number of reader who have currently locked the resource or -1 if locked for writing. Note that the status may change any time.
+    long getCurrentReaderLockCount() const
+    {
+        ASSERT(readers >= -1);
+        ASSERT(writersWaiting >= 0);
+        return readers;
     }
 
 private:

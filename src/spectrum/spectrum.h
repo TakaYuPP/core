@@ -6,6 +6,7 @@
 #include "platform/file_io.h"
 #include "platform/time_stamp_counter.h"
 #include "platform/memory.h"
+#include "platform/profiling.h"
 
 #include "network_messages/entity.h"
 
@@ -17,7 +18,7 @@
 #include "common_buffers.h"
 
 GLOBAL_VAR_DECL volatile char spectrumLock GLOBAL_VAR_INIT(0);
-GLOBAL_VAR_DECL ::Entity* spectrum GLOBAL_VAR_INIT(nullptr);
+GLOBAL_VAR_DECL EntityRecord* spectrum GLOBAL_VAR_INIT(nullptr);
 GLOBAL_VAR_DECL struct SpectrumInfo {
     unsigned int numberOfEntities = 0;  // Number of entities in the spectrum hash map, may include entries with balance == 0
     unsigned long long totalAmount = 0; // Total amount of qubics in the spectrum
@@ -36,6 +37,7 @@ GLOBAL_VAR_DECL unsigned long long spectrumReorgTotalExecutionTicks GLOBAL_VAR_I
 // Update SpectrumInfo data (exensive, because it iterates the whole spectrum), acquire no lock
 static void updateSpectrumInfo(SpectrumInfo& si = spectrumInfo)
 {
+    PROFILE_SCOPE();
     si.numberOfEntities = 0;
     si.totalAmount = 0;
     for (unsigned int i = 0; i < SPECTRUM_CAPACITY; i++)
@@ -54,6 +56,7 @@ static void updateSpectrumInfo(SpectrumInfo& si = spectrumInfo)
 // Every 2nd balance <= dustThresholdBurnHalf is burned in this case.
 static void updateAndAnalzeEntityCategoryPopulations()
 {
+    PROFILE_SCOPE();
     static_assert(MAX_SUPPLY < (1llu << entityCategoryCount));
     setMem(entityCategoryPopulations, sizeof(entityCategoryPopulations), 0);
 
@@ -142,10 +145,12 @@ private:
 // Clean up spectrum hash map, removing all entities with balance 0. Updates spectrumInfo.
 static void reorganizeSpectrum()
 {
+    PROFILE_SCOPE();
+
     unsigned long long spectrumReorgStartTick = __rdtsc();
 
-    ::Entity* reorgSpectrum = (::Entity*)reorgBuffer;
-    setMem(reorgSpectrum, SPECTRUM_CAPACITY * sizeof(::Entity), 0);
+    EntityRecord* reorgSpectrum = (EntityRecord*)reorgBuffer;
+    setMem(reorgSpectrum, SPECTRUM_CAPACITY * sizeof(EntityRecord), 0);
     for (unsigned int i = 0; i < SPECTRUM_CAPACITY; i++)
     {
         if (spectrum[i].incomingAmount - spectrum[i].outgoingAmount)
@@ -155,7 +160,7 @@ static void reorganizeSpectrum()
         iteration:
             if (isZero(reorgSpectrum[index].publicKey))
             {
-                copyMem(&reorgSpectrum[index], &spectrum[i], sizeof(::Entity));
+                copyMem(&reorgSpectrum[index], &spectrum[i], sizeof(EntityRecord));
             }
             else
             {
@@ -165,7 +170,7 @@ static void reorganizeSpectrum()
             }
         }
     }
-    copyMem(spectrum, reorgSpectrum, SPECTRUM_CAPACITY * sizeof(::Entity));
+    copyMem(spectrum, reorgSpectrum, SPECTRUM_CAPACITY * sizeof(EntityRecord));
 
     unsigned int digestIndex;
     for (digestIndex = 0; digestIndex < SPECTRUM_CAPACITY; digestIndex++)
@@ -244,10 +249,10 @@ static void increaseEnergy(const m256i& publicKey, long long amount)
         {
             // Update anti-dust burn thresholds (and log spectrum stats before burning)
             updateAndAnalzeEntityCategoryPopulations();
-#if LOG_SPECTRUM_STATS
+#if LOG_SPECTRUM
             logSpectrumStats();
 #endif
-#if LOG_DUST_BURNINGS
+#if LOG_SPECTRUM
             DustBurnLogger dbl;
 #endif
 
@@ -260,7 +265,7 @@ static void increaseEnergy(const m256i& publicKey, long long amount)
                     if (balance <= dustThresholdBurnAll && balance)
                     {
                         spectrum[i].outgoingAmount = spectrum[i].incomingAmount;
-#if LOG_DUST_BURNINGS
+#if LOG_SPECTRUM
                         dbl.addDustBurn(spectrum[i].publicKey, balance);
 #endif
                     }
@@ -279,7 +284,7 @@ static void increaseEnergy(const m256i& publicKey, long long amount)
                         if (++countBurnCanadiates & 1)
                         {
                             spectrum[i].outgoingAmount = spectrum[i].incomingAmount;
-#if LOG_DUST_BURNINGS
+#if LOG_SPECTRUM
                             dbl.addDustBurn(spectrum[i].publicKey, balance);
 #endif
                         }
@@ -287,7 +292,7 @@ static void increaseEnergy(const m256i& publicKey, long long amount)
                 }
             }
 
-#if LOG_DUST_BURNINGS
+#if LOG_SPECTRUM
             // Finished dust burning (pass message to log)
             dbl.finished();
 #endif
@@ -295,7 +300,7 @@ static void increaseEnergy(const m256i& publicKey, long long amount)
             // Remove entries with balance zero from hash map
             reorganizeSpectrum();
 
-#if LOG_SPECTRUM_STATS
+#if LOG_SPECTRUM
             // Log spectrum stats after burning (before increasing energy / potenitally creating entity)
             updateAndAnalzeEntityCategoryPopulations();
             logSpectrumStats();
@@ -323,7 +328,7 @@ static void increaseEnergy(const m256i& publicKey, long long amount)
                 spectrumInfo.numberOfEntities++;
                 spectrumInfo.totalAmount += amount;
 
-#if LOG_SPECTRUM_STATS
+#if LOG_SPECTRUM
                 if ((spectrumInfo.numberOfEntities & 0x7ffff) == 1)
                 {
                     // Log spectrum stats when the number of entities hits the next half million
@@ -375,8 +380,8 @@ static bool decreaseEnergy(const int index, long long amount)
 static bool loadSpectrum(const CHAR16* fileName = SPECTRUM_FILE_NAME, const CHAR16* directory = nullptr)
 {
     logToConsole(L"Loading spectrum file ...");
-    long long loadedSize = load(fileName, SPECTRUM_CAPACITY * sizeof(::Entity), (unsigned char*)spectrum, directory);
-    if (loadedSize != SPECTRUM_CAPACITY * sizeof(::Entity))
+    long long loadedSize = load(fileName, SPECTRUM_CAPACITY * sizeof(EntityRecord), (unsigned char*)spectrum, directory);
+    if (loadedSize != SPECTRUM_CAPACITY * sizeof(EntityRecord))
     {
         logStatusToConsole(L"EFI_FILE_PROTOCOL.Read() reads invalid number of bytes", loadedSize, __LINE__);
 
@@ -393,10 +398,10 @@ static bool saveSpectrum(const CHAR16* fileName = SPECTRUM_FILE_NAME, const CHAR
     const unsigned long long beginningTick = __rdtsc();
 
     ACQUIRE(spectrumLock);
-    long long savedSize = save(fileName, SPECTRUM_CAPACITY * sizeof(::Entity), (unsigned char*)spectrum, directory);
+    long long savedSize = save(fileName, SPECTRUM_CAPACITY * sizeof(EntityRecord), (unsigned char*)spectrum, directory);
     RELEASE(spectrumLock);
 
-    if (savedSize == SPECTRUM_CAPACITY * sizeof(::Entity))
+    if (savedSize == SPECTRUM_CAPACITY * sizeof(EntityRecord))
     {
         setNumber(message, savedSize, TRUE);
         appendText(message, L" bytes of the spectrum data are saved (");
@@ -410,12 +415,12 @@ static bool saveSpectrum(const CHAR16* fileName = SPECTRUM_FILE_NAME, const CHAR
 
 static bool initSpectrum()
 {
-    if (!allocatePool(spectrumSizeInBytes, (void**)&spectrum)
-        || !allocatePool(spectrumDigestsSizeInByte, (void**)&spectrumDigests))
+    if (!allocPoolWithErrorLog(L"spectrum", spectrumSizeInBytes, (void**)&spectrum, __LINE__)
+        || !allocPoolWithErrorLog(L"spectrumDigests", spectrumDigestsSizeInByte, (void**)&spectrumDigests, __LINE__))
     {
-        logToConsole(L"Failed to allocate spectrum memory!");
         return false;
     }
+    spectrumLock = 0;
 
     return true;
 }

@@ -2,6 +2,8 @@
 
 #include "gtest/gtest.h"
 
+#define ENABLE_PROFILING 0
+
 // needed for scoring task queue
 #define NUMBER_OF_TRANSACTIONS_PER_TICK 1024
 
@@ -34,15 +36,21 @@ using namespace test_utils;
 
 
 static const std::string COMMON_TEST_SAMPLES_FILE_NAME = "data/samples_20240815.csv";
-static const std::string COMMON_TEST_SCORES_FILE_NAME = "data/scores_v3.csv";
-static constexpr unsigned long long COMMON_TEST_NUMBER_OF_SAMPLES = 32; // set to 0 for run all available samples
+static const std::string COMMON_TEST_SCORES_FILE_NAME = "data/scores_v5.csv";
 static constexpr bool PRINT_DETAILED_INFO = false;
-static constexpr int MAX_NUMBER_OF_THREADS = 0; // set 0 for run maximum number of threads of the computer.
+
+// set to 0 for run all available samples
+// For profiling enable, run all available samples
+static constexpr unsigned long long COMMON_TEST_NUMBER_OF_SAMPLES = ENABLE_PROFILING ? 0 : 32;
+
+// set 0 for run maximum number of threads of the computer.
+// For profiling enable, set it equal to deployment setting
+static constexpr int MAX_NUMBER_OF_THREADS = ENABLE_PROFILING ? 12 : 0;
 static bool gCompareReference = false;
 
 // Only run on specific index of samples and setting
 std::vector<unsigned int> filteredSamples;// = { 0 };
-std::vector<unsigned int> filteredSettings;// = { 0,1 };
+std::vector<unsigned int> filteredSettings;// = { 0 };
 
 std::vector<std::vector<unsigned int>> gScoresGroundTruth;
 std::map<unsigned int, unsigned long long> gScoreProcessingTime;
@@ -58,7 +66,16 @@ static void processElement(unsigned char* miningSeed, unsigned char* publicKey, 
         return;
     }
 
-    auto pScore = std::make_unique<ScoreFunction<kDataLength, kSettings[i][NR_NEURONS], kSettings[i][NR_NEIGHBOR_NEURONS], kSettings[i][DURATIONS], 1>>();
+    auto pScore = std::make_unique<ScoreFunction<
+        kSettings[i][score_params::NUMBER_OF_INPUT_NEURONS],
+        kSettings[i][score_params::NUMBER_OF_OUTPUT_NEURONS],
+        kSettings[i][score_params::NUMBER_OF_TICKS],
+        kSettings[i][score_params::NUMBER_OF_NEIGHBORS],
+        kSettings[i][score_params::POPULATION_THRESHOLD],
+        kSettings[i][score_params::NUMBER_OF_MUTATIONS],
+        kSettings[i][score_params::SOLUTION_THRESHOLD],
+        1
+        >>();
     pScore->initMemory();
     pScore->initMiningData(miningSeed);
     int x = 0;
@@ -72,7 +89,16 @@ static void processElement(unsigned char* miningSeed, unsigned char* publicKey, 
     unsigned int refScore = 0;
     if (gCompareReference)
     {
-        ScoreReferenceImplementation<kDataLength, kSettings[i][NR_NEURONS], kSettings[i][NR_NEIGHBOR_NEURONS], kSettings[i][DURATIONS], 1> score;
+        score_reference::ScoreReferenceImplementation<
+            kSettings[i][score_params::NUMBER_OF_INPUT_NEURONS],
+            kSettings[i][score_params::NUMBER_OF_OUTPUT_NEURONS],
+            kSettings[i][score_params::NUMBER_OF_TICKS],
+            kSettings[i][score_params::NUMBER_OF_NEIGHBORS],
+            kSettings[i][score_params::POPULATION_THRESHOLD],
+            kSettings[i][score_params::NUMBER_OF_MUTATIONS],
+            kSettings[i][score_params::SOLUTION_THRESHOLD],
+            1
+        > score;
         score.initMemory();
         score.initMiningData(miningSeed);
         refScore = score(0, publicKey, nonce);
@@ -90,7 +116,7 @@ static void processElement(unsigned char* miningSeed, unsigned char* publicKey, 
             gtIndex = gScoreIndexMap[i];
         }
 
-        if (PRINT_DETAILED_INFO || gtIndex < 0 || (score_value != gScoresGroundTruth[sampleIndex][gtIndex]))
+        if (ENABLE_PROFILING || PRINT_DETAILED_INFO || gtIndex < 0 || (score_value != gScoresGroundTruth[sampleIndex][gtIndex]))
         {
             if (gScoreProcessingTime.count(i) == 0)
             {
@@ -101,27 +127,38 @@ static void processElement(unsigned char* miningSeed, unsigned char* publicKey, 
                 gScoreProcessingTime[i] += elapsed;
             }
 
-            std::cout << "[sample " << sampleIndex
-                << "; setting " << i
-                << ": NEURON " << kSettings[i][NR_NEURONS]
-                << ", NEIGHBOR " << kSettings[i][NR_NEIGHBOR_NEURONS]
-                << ", DURATIONS " << kSettings[i][DURATIONS] << "]" << std::endl;
-            std::cout << "    score " << score_value;
-            if (gtIndex >= 0)
+            if (!ENABLE_PROFILING)
             {
-                std::cout << " vs gt " << gScoresGroundTruth[sampleIndex][gtIndex] << std::endl;
+                std::cout << "[sample " << sampleIndex
+                    << "; setting " << i << ": "
+                    << kSettings[i][score_params::NUMBER_OF_INPUT_NEURONS] << ", "
+                    << kSettings[i][score_params::NUMBER_OF_OUTPUT_NEURONS] << ", "
+                    << kSettings[i][score_params::NUMBER_OF_TICKS] << ", "
+                    << kSettings[i][score_params::POPULATION_THRESHOLD] << ", "
+                    << kSettings[i][score_params::NUMBER_OF_MUTATIONS] << ", "
+                    << kSettings[i][score_params::SOLUTION_THRESHOLD]
+                    << "]" 
+                    << std::endl;
+                std::cout << "    score " << score_value;
+                if (gtIndex >= 0)
+                {
+                    std::cout << " vs gt " << gScoresGroundTruth[sampleIndex][gtIndex] << std::endl;
+                }
+                else // No mapping from ground truth
+                {
+                    std::cout << " vs gt NA" << std::endl;
+                }
+                std::cout << "    time " << elapsed << " ms " << std::endl;
             }
-            else // No mapping from ground truth
-            {
-                std::cout << " vs gt NA" << std::endl;
-            }
-            std::cout << "    time " << elapsed << " ms " << std::endl;
         }
 
-        EXPECT_GT(gScoreIndexMap.count(i), 0);
-        if (gtIndex >= 0)
+        if (!ENABLE_PROFILING)
         {
-            EXPECT_EQ(gScoresGroundTruth[sampleIndex][gtIndex], score_value);
+            EXPECT_GT(gScoreIndexMap.count(i), 0);
+            if (gtIndex >= 0)
+            {
+                EXPECT_EQ(gScoresGroundTruth[sampleIndex][gtIndex], score_value);
+            }
         }
     }
 }
@@ -143,6 +180,10 @@ static void process(unsigned char* miningSeed, unsigned char* publicKey, unsigne
 void runCommonTests()
 {
 
+#ifdef ENABLE_PROFILING
+    gProfilingDataCollector.init(1024);
+#endif
+
 #if defined (__AVX512F__) && !GENERIC_K12
     initAVX512KangarooTwelveConstants();
 #endif
@@ -153,6 +194,227 @@ void runCommonTests()
     auto scoresString = readCSV(COMMON_TEST_SCORES_FILE_NAME);
     ASSERT_FALSE(sampleString.empty());
     ASSERT_FALSE(scoresString.empty());
+
+    // Convert the raw string and do the data verification
+    unsigned long long numberOfSamplesReadFromFile = sampleString.size();
+    unsigned long long numberOfSamples = numberOfSamplesReadFromFile;
+    if (COMMON_TEST_NUMBER_OF_SAMPLES > 0)
+    {
+        std::cout << "Request testing with " << COMMON_TEST_NUMBER_OF_SAMPLES << " samples." << std::endl;
+
+        numberOfSamples = std::min(COMMON_TEST_NUMBER_OF_SAMPLES, numberOfSamples);
+        if (COMMON_TEST_NUMBER_OF_SAMPLES <= numberOfSamples)
+        {
+            numberOfSamples = COMMON_TEST_NUMBER_OF_SAMPLES;
+        }
+        else // Request number of samples greater than existed. Only valid for reference score validation only
+        {
+            if (gCompareReference)
+            {
+                numberOfSamples = COMMON_TEST_NUMBER_OF_SAMPLES;
+                std::cout << "Refenrece comparison mode: " << numberOfSamples << " samples are read from file for comparision." 
+                    << "Remained are generated randomly."
+                    << std::endl;
+            }
+            else
+            {
+                std::cout << "Only " << numberOfSamples << " samples can be read from file for comparison" << std::endl;
+            }
+        }
+    }
+
+    std::vector<m256i> miningSeeds(numberOfSamples);
+    std::vector<m256i> publicKeys(numberOfSamples);
+    std::vector<m256i> nonces(numberOfSamples);
+
+    // Reading the input samples
+    for (unsigned long long i = 0; i < numberOfSamples; ++i)
+    {
+        if (i < numberOfSamplesReadFromFile)
+        {
+            miningSeeds[i] = hexToByte(sampleString[i][0], 32);
+            publicKeys[i] = hexToByte(sampleString[i][1], 32);
+            nonces[i] = hexToByte(sampleString[i][2], 32);
+        }
+        else // Samples from files are not enough, randomly generate more
+        {
+            _rdrand64_step((unsigned long long*) & miningSeeds[i].m256i_u8[0]);
+            _rdrand64_step((unsigned long long*) & miningSeeds[i].m256i_u8[8]);
+            _rdrand64_step((unsigned long long*) & miningSeeds[i].m256i_u8[16]);
+            _rdrand64_step((unsigned long long*) & miningSeeds[i].m256i_u8[24]);
+
+            _rdrand64_step((unsigned long long*) & publicKeys[i].m256i_u8[0]);
+            _rdrand64_step((unsigned long long*) & publicKeys[i].m256i_u8[8]);
+            _rdrand64_step((unsigned long long*) & publicKeys[i].m256i_u8[16]);
+            _rdrand64_step((unsigned long long*) & publicKeys[i].m256i_u8[24]);
+
+            _rdrand64_step((unsigned long long*) & nonces[i].m256i_u8[0]);
+            _rdrand64_step((unsigned long long*) & nonces[i].m256i_u8[8]);
+            _rdrand64_step((unsigned long long*) & nonces[i].m256i_u8[16]);
+            _rdrand64_step((unsigned long long*) & nonces[i].m256i_u8[24]);
+
+        }
+    }
+
+    // Reading the header of score and verification
+    if (!gCompareReference)
+    {
+        auto scoreHeader = scoresString[0];
+        std::cout << "Testing " << numberOfGeneratedSetting << " param combinations on " << scoreHeader.size() << " ground truth settings." << std::endl;
+        for (unsigned long long i = 0; i < numberOfGeneratedSetting; ++i)
+        {
+            long long foundIndex = -1;
+
+            for (unsigned long long gtIdx = 0; gtIdx < scoreHeader.size(); ++gtIdx)
+            {
+                auto scoresSettingHeader = convertULLFromString(scoreHeader[gtIdx]);
+
+                // Check matching between number of parameters types
+                if (scoresSettingHeader.size() != score_params::MAX_PARAM_TYPE)
+                {
+                    std::cout << "Mismatched the number of params (NEURONS, DURATION ...) and MAX_PARAM_TYPE" << std::endl;
+                    EXPECT_EQ(scoresSettingHeader.size(), score_params::MAX_PARAM_TYPE);
+                    return;
+                }
+
+                // Check the value matching between ground truth file and score params
+                // Only record the current available score params
+                int count = 0;
+                for (unsigned long long j = 0; j < score_params::MAX_PARAM_TYPE; ++j)
+                {
+                    if (scoresSettingHeader[j] == score_params::kSettings[i][j])
+                    {
+                        count++;
+                    }
+                }
+                if (count == score_params::MAX_PARAM_TYPE)
+                {
+                    foundIndex = gtIdx;
+                    break;
+                }
+            }
+            if (foundIndex >= 0)
+            {
+                gScoreIndexMap[i] = foundIndex;
+            }
+        }
+        // In case of number of setting is lower than the ground truth. Consider we are in experiement, still run but expect the test failed
+        if (gScoreIndexMap.size() < numberOfGeneratedSetting)
+        {
+            std::cout << "WARNING: Number of provided ground truth settings is lower than tested settings. Only test with available ones."
+                << std::endl;
+            EXPECT_EQ(gScoreIndexMap.size(), numberOfGeneratedSetting);
+        }
+
+
+        // Read the groudtruth scores and init result scores
+        numberOfSamples = std::min(numberOfSamples, scoresString.size() - 1);
+        gScoresGroundTruth.resize(numberOfSamples);
+        for (size_t i = 0; i < numberOfSamples; ++i)
+        {
+            auto scoresStr = scoresString[i + 1];
+            size_t scoreSize = scoresStr.size();
+            for (size_t j = 0; j < scoreSize; ++j)
+            {
+                gScoresGroundTruth[i].push_back(std::stoi(scoresStr[j]));
+            }
+        }
+    }
+
+    // Run the test
+    unsigned int numberOfThreads = std::thread::hardware_concurrency();
+    if (MAX_NUMBER_OF_THREADS > 0)
+    {
+        numberOfThreads = numberOfThreads > MAX_NUMBER_OF_THREADS ? MAX_NUMBER_OF_THREADS : numberOfThreads;
+    }
+
+    if (ENABLE_PROFILING)
+    {
+        std::cout << "Running " << numberOfThreads << " threads for collecting multiple threads performance" << std::endl;
+    }
+    else
+    {
+        if (numberOfThreads > 1)
+        {
+            std::cout << "Compare score only. Lauching test with all available " << numberOfThreads << " threads." << std::endl;
+        }
+        else
+        {
+            std::cout << "Running one sample on one thread for collecting single thread performance." << std::endl;
+        }
+    }
+
+
+    std::vector<int> samples;
+    for (int i = 0; i < numberOfSamples; ++i)
+    {
+        if (!filteredSamples.empty()
+            && std::find(filteredSamples.begin(), filteredSamples.end(), i) == filteredSamples.end())
+        {
+            continue;
+        }
+        samples.push_back(i);
+    }
+
+    std::string compTerm = " and compare with groundtruths from file.";
+    if (gCompareReference)
+    {
+        compTerm = " and compare with reference code.";
+    }
+    if (ENABLE_PROFILING)
+    {
+        compTerm = "for profiling, without comparing any result (set test case FAILED as default)";
+    }
+
+    std::cout << "Processing " << samples.size() << " samples " << compTerm << "..." << std::endl;
+#pragma omp parallel for num_threads(numberOfThreads)
+    for (int i = 0; i < samples.size(); ++i)
+    {
+        int index = samples[i];
+        process<numberOfGeneratedSetting>(miningSeeds[index].m256i_u8, publicKeys[index].m256i_u8, nonces[index].m256i_u8, index);
+#pragma omp critical
+        std::cout << i << ", ";
+    }
+    std::cout << std::endl;
+
+    // Print the average processing time
+    if (PRINT_DETAILED_INFO || ENABLE_PROFILING)
+    {
+        for (auto scoreTime : gScoreProcessingTime)
+        {
+            unsigned long long processingTime = filteredSamples.empty() ? scoreTime.second / numberOfSamples : scoreTime.second / filteredSamples.size();
+            std::cout << "Avg processing time [setting " << scoreTime.first << " "
+                << kSettings[scoreTime.first][score_params::NUMBER_OF_INPUT_NEURONS] << ", "
+                << kSettings[scoreTime.first][score_params::NUMBER_OF_OUTPUT_NEURONS] << ", "
+                << kSettings[scoreTime.first][score_params::NUMBER_OF_TICKS] << ", "
+                << kSettings[scoreTime.first][score_params::NUMBER_OF_NEIGHBORS] << ", "
+                << kSettings[scoreTime.first][score_params::POPULATION_THRESHOLD] << ", "
+                << kSettings[scoreTime.first][score_params::NUMBER_OF_MUTATIONS] << ", "
+                << kSettings[scoreTime.first][score_params::SOLUTION_THRESHOLD]
+                << "]: " << processingTime << " ms" << std::endl;
+        }
+    }
+
+#ifdef ENABLE_PROFILING
+    gProfilingDataCollector.writeToFile();
+#endif
+}
+
+
+TEST(TestQubicScoreFunction, CommonTests)
+{
+    runCommonTests();
+}
+
+TEST(TestQubicScoreFunction, TestDeterministic)
+{
+    constexpr int NUMBER_OF_THREADS = 4;
+    constexpr int NUMBER_OF_PHASES = 2;
+    constexpr int NUMBER_OF_SAMPLES = 4;
+
+    // Read the parameters and results
+    auto sampleString = readCSV(COMMON_TEST_SAMPLES_FILE_NAME);
+    ASSERT_FALSE(sampleString.empty());
 
     // Convert the raw string and do the data verification
     unsigned long long numberOfSamples = sampleString.size();
@@ -173,121 +435,53 @@ void runCommonTests()
         nonces[i] = hexToByte(sampleString[i][2], 32);
     }
 
-    // Reading the header of score and verification
-    auto scoreHeader = scoresString[0];
-    std::cout << "Testing " << numberOfGeneratedSetting << " param combinations on " << scoreHeader.size() << " ground truth settings." << std::endl;
-    for (unsigned long long i = 0; i < numberOfGeneratedSetting; ++i)
+    auto pScore = std::make_unique<ScoreFunction<
+        ::NUMBER_OF_INPUT_NEURONS,
+        ::NUMBER_OF_OUTPUT_NEURONS,
+        ::NUMBER_OF_TICKS,
+        ::NUMBER_OF_NEIGHBORS,
+        ::POPULATION_THRESHOLD,
+        ::NUMBER_OF_MUTATIONS,
+        ::SOLUTION_THRESHOLD,
+        NUMBER_OF_THREADS
+        >>();
+    pScore->initMemory();
+
+    // Run with 4 mining seeds, each run 4 separate threads and the result need to matched
+    int scores[NUMBER_OF_PHASES][NUMBER_OF_THREADS * NUMBER_OF_SAMPLES] = {0};
+    for (unsigned long long i = 0; i < NUMBER_OF_PHASES; ++i)
     {
-        long long foundIndex = -1;
+        pScore->initMiningData(miningSeeds[i]);
 
-        for (unsigned long long gtIdx = 0; gtIdx < scoreHeader.size(); ++gtIdx)
+#pragma omp parallel for num_threads(NUMBER_OF_THREADS)
+        for (int threadId = 0; threadId < NUMBER_OF_THREADS; ++threadId)
         {
-            auto scoresSettingHeader = convertULLFromString(scoreHeader[gtIdx]);
-
-            // Check matching between number of parameters types
-            if (scoresSettingHeader.size() != score_params::MAX_PARAM_TYPE)
+            if (threadId % 2 == 0)
             {
-                std::cout << "Mismatched the number of params (NEURONS, DURATION ...) and MAX_PARAM_TYPE" << std::endl;
-                EXPECT_EQ(scoresSettingHeader.size(), score_params::MAX_PARAM_TYPE);
-                return;
-            }
-
-            // Check the value matching between ground truth file and score params
-            // Only record the current available score params
-            int count = 0;
-            for (unsigned long long j = 0; j < score_params::MAX_PARAM_TYPE; ++j)
-            {
-                if (scoresSettingHeader[j] == score_params::kSettings[i][j])
+                for (int sampleId = 0; sampleId < NUMBER_OF_SAMPLES; ++sampleId)
                 {
-                    count++;
+                    scores[i][threadId * NUMBER_OF_SAMPLES + sampleId] = (*pScore)(threadId, publicKeys[sampleId], miningSeeds[i], nonces[sampleId]);
                 }
             }
-            if (count == score_params::MAX_PARAM_TYPE)
+            else
             {
-                foundIndex = gtIdx;
-                break;
+                for (int sampleId = NUMBER_OF_SAMPLES - 1; sampleId >= 0; --sampleId)
+                {
+                    scores[i][threadId * NUMBER_OF_SAMPLES + sampleId] = (*pScore)(threadId, publicKeys[sampleId], miningSeeds[i], nonces[sampleId]);
+                }
             }
         }
-        if (foundIndex >= 0)
+    }
+
+    // Each threads run with the same samples but the order is reversed. Expect the scores are matched.
+    for (unsigned long long i = 0; i < NUMBER_OF_PHASES; ++i)
+    {
+        for (int threadId = 0; threadId < NUMBER_OF_THREADS - 1; ++threadId)
         {
-            gScoreIndexMap[i] = foundIndex;
+            for (int sampleId = 0; sampleId < NUMBER_OF_SAMPLES; ++sampleId)
+            {
+                EXPECT_EQ(scores[i][threadId * NUMBER_OF_SAMPLES + sampleId], scores[i][(threadId + 1) * NUMBER_OF_SAMPLES + sampleId]);
+            }
         }
     }
-    // In case of number of setting is lower than the ground truth. Consider we are in experiement, still run but expect the test failed
-    if (gScoreIndexMap.size() < numberOfGeneratedSetting && !gCompareReference)
-    {
-        std::cout << "WARNING: Number of provided ground truth settings is lower than tested settings. Only test with available ones." 
-                  << std::endl;
-        EXPECT_EQ(gScoreIndexMap.size(), numberOfGeneratedSetting);
-    }
-
-    // Read the groudtruth scores and init result scores
-    numberOfSamples = std::min(numberOfSamples, scoresString.size() - 1);
-    gScoresGroundTruth.resize(numberOfSamples);
-    for (size_t i = 0; i < numberOfSamples; ++i)
-    {
-       auto scoresStr = scoresString[i + 1];
-       size_t scoreSize = scoresStr.size();
-       for (size_t j = 0; j < scoreSize; ++j)
-       {
-           gScoresGroundTruth[i].push_back(std::stoi(scoresStr[j]));
-       }
-    }
-
-    // Run the test
-    unsigned int numberOfThreads = PRINT_DETAILED_INFO ? 1 : std::thread::hardware_concurrency();
-    if (MAX_NUMBER_OF_THREADS > 0)
-    {
-        numberOfThreads = numberOfThreads > MAX_NUMBER_OF_THREADS ? MAX_NUMBER_OF_THREADS : numberOfThreads;
-    }
-    if (numberOfThreads > 1)
-    {
-        std::cout << "Compare score only. Lauching test with all available " << numberOfThreads << " threads." << std::endl;
-    }
-    else
-    {
-        std::cout << "Running one sample on one thread for collecting performance." << std::endl;
-    }
-
-    std::vector<int> samples;
-    for (int i = 0; i < numberOfSamples; ++i)
-    {
-        if (!filteredSamples.empty()
-            && std::find(filteredSamples.begin(), filteredSamples.end(), i) == filteredSamples.end())
-        {
-            continue;
-        }
-        samples.push_back(i);
-    }
-
-    std::cout << "Processing " << samples.size() << " samples ..." << std::endl;
-#pragma omp parallel for num_threads(numberOfThreads)
-    for (int i = 0; i < samples.size(); ++i)
-    {
-        int index = samples[i];
-        process<numberOfGeneratedSetting>(miningSeeds[index].m256i_u8, publicKeys[index].m256i_u8, nonces[index].m256i_u8, index);
-#pragma omp critical
-        std::cout << i << ", ";
-    }
-    std::cout << std::endl;
-
-    // Print the average processing time
-    if (PRINT_DETAILED_INFO)
-    {
-        for (auto scoreTime : gScoreProcessingTime)
-        {
-            unsigned long long processingTime = filteredSamples.empty() ? scoreTime.second / numberOfSamples : scoreTime.second / filteredSamples.size();
-            std::cout << "Avg processing time [setting " << scoreTime.first
-                << ", NEURON " << kSettings[scoreTime.first][NR_NEURONS]
-                << ", NEIGHBOR " << kSettings[scoreTime.first][NR_NEIGHBOR_NEURONS]
-                << ", DURATIONS " << kSettings[scoreTime.first][DURATIONS]
-                << "]: " << processingTime << " ms" << std::endl;
-        }
-    }
-}
-
-
-TEST(TestQubicScoreFunction, CommonTests)
-{
-    runCommonTests();
 }

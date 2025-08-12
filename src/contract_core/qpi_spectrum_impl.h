@@ -1,7 +1,7 @@
 #pragma once
 
 #include "contract_core/contract_exec.h"
-#include "spectrum.h"
+#include "spectrum/spectrum.h"
 
 
 bool QPI::QpiContextFunctionCall::getEntity(const m256i& id, QPI::Entity& entity) const
@@ -76,6 +76,11 @@ long long QPI::QpiContextProcedureCall::burn(long long amount) const
 
 long long QPI::QpiContextProcedureCall::transfer(const m256i& destination, long long amount) const
 {
+    if (contractCallbacksRunning & ContractCallbackPostIncomingTransfer)
+    {
+        return INVALID_AMOUNT;
+    }
+
     if (amount < 0 || amount > MAX_AMOUNT)
     {
         return -((long long)(MAX_AMOUNT + 1));
@@ -102,9 +107,41 @@ long long QPI::QpiContextProcedureCall::transfer(const m256i& destination, long 
         if (!contractActionTracker.addQuTransfer(_currentContractId, destination, amount))
             __qpiAbort(ContractErrorTooManyActions);
 
+        __qpiNotifyPostIncomingTransfer(_currentContractId, destination, amount, TransferType::qpiTransfer);
+
         const QuTransfer quTransfer = { _currentContractId , destination , amount };
         logger.logQuTransfer(quTransfer);
     }
 
     return remainingAmount;
+}
+
+m256i QPI::QpiContextFunctionCall::nextId(const m256i& currentId) const
+{
+    int index = spectrumIndex(currentId);
+    while (++index < SPECTRUM_CAPACITY)
+    {
+        const m256i& nextId = spectrum[index].publicKey;
+        if (!isZero(nextId))
+        {
+            return nextId;
+        }
+    }
+
+    return m256i::zero();
+}
+
+m256i QPI::QpiContextFunctionCall::prevId(const m256i& currentId) const
+{
+    int index = spectrumIndex(currentId);
+    while (--index >= 0)
+    {
+        const m256i& prevId = spectrum[index].publicKey;
+        if (!isZero(prevId))
+        {
+            return prevId;
+        }
+    }
+
+    return m256i::zero();
 }
