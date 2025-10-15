@@ -1089,19 +1089,20 @@ protected:
 	{
 		uint64 entryAmount;
 		uint64 totalEntryAmount;
-		sint32 i;
+		sint64 idx;
 	};
 
 	PUBLIC_FUNCTION_WITH_LOCALS(getQuRaffleEntryAverageAmount)
 	{
-		for (locals.i = 0; locals.i < (sint32)state.numberOfQuRaffleMembers; locals.i++)
+		locals.idx = state.quRaffleEntryAmount.nextElementIndex(NULL_INDEX);
+		while (locals.idx != NULL_INDEX)
 		{
-			state.quRaffleEntryAmount.get(state.quRaffleMembers.get(locals.i), locals.entryAmount);
-			locals.totalEntryAmount += locals.entryAmount;
+			locals.totalEntryAmount += state.quRaffleEntryAmount.value(locals.idx);
+			locals.idx = state.quRaffleEntryAmount.nextElementIndex(locals.idx);
 		}
-		if (state.numberOfQuRaffleMembers > 0)
+		if (state.numberOfEntryAmountSubmitted > 0)
 		{
-			output.entryAverageAmount = div(locals.totalEntryAmount, state.numberOfQuRaffleMembers * 1ULL);
+			output.entryAverageAmount = div(locals.totalEntryAmount, state.numberOfEntryAmountSubmitted * 1ULL);
 		}
 		else
 		{
@@ -1120,7 +1121,7 @@ protected:
 		REGISTER_USER_FUNCTION(getActiveTokenRaffle, 6);
 		REGISTER_USER_FUNCTION(getEpochRaffleIndexes, 7);
 		REGISTER_USER_FUNCTION(getQuRaffleEntryAmountPerUser, 8);
-		// REGISTER_USER_FUNCTION(getQuRaffleEntryAverageAmount, 9);
+		REGISTER_USER_FUNCTION(getQuRaffleEntryAverageAmount, 9);
 
 		REGISTER_USER_PROCEDURE(registerInSystem, 1);
 		REGISTER_USER_PROCEDURE(logoutInSystem, 2);
