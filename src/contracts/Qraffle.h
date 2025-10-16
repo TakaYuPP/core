@@ -242,6 +242,7 @@ public:
 
 	struct getAnalaytics_output
 	{
+		uint64 currentQuRaffleAmount;
 		uint64 totalBurnAmount;
 		uint64 totalCharityAmount;
 		uint64 totalShareholderAmount;
@@ -977,6 +978,7 @@ protected:
 	
 	PUBLIC_FUNCTION(getAnalaytics)
 	{
+		output.currentQuRaffleAmount = state.qREAmount;
 		output.totalBurnAmount = state.totalBurnAmount;
 		output.totalCharityAmount = state.totalCharityAmount;
 		output.totalShareholderAmount = state.totalShareholderAmount;
