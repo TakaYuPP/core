@@ -236,11 +236,11 @@ public:
 		sint32 returnCode;
 	};
 
-	struct getAnalaytics_input
+	struct getAnalytics_input
 	{
 	};
 
-	struct getAnalaytics_output
+	struct getAnalytics_output
 	{
 		uint64 currentQuRaffleAmount;
 		uint64 totalBurnAmount;
@@ -976,7 +976,7 @@ protected:
 		output.returnCode = QRAFFLE_SUCCESS;
 	}
 	
-	PUBLIC_FUNCTION(getAnalaytics)
+	PUBLIC_FUNCTION(getAnalytics)
 	{
 		output.currentQuRaffleAmount = state.qREAmount;
 		output.totalBurnAmount = state.totalBurnAmount;
@@ -1116,7 +1116,7 @@ protected:
 	REGISTER_USER_FUNCTIONS_AND_PROCEDURES()
 	{
 		REGISTER_USER_FUNCTION(getRegisters, 1);
-		REGISTER_USER_FUNCTION(getAnalaytics, 2);
+		REGISTER_USER_FUNCTION(getAnalytics, 2);
 		REGISTER_USER_FUNCTION(getActiveProposal, 3);
 		REGISTER_USER_FUNCTION(getEndedTokenRaffle, 4);
 		REGISTER_USER_FUNCTION(getEndedQuRaffle, 5);
