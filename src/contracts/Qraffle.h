@@ -1189,7 +1189,7 @@ protected:
 		Asset QraffleAsset;
 		id digest, winner, shareholder;
 		sint64 idx;
-		uint64 sumOfEntryAmountSubmitted, r, winnerRevenue, burnAmount, charityRevenue, shareholderRevenue, registerRevenue, fee, oneCompRev;
+		uint64 sumOfEntryAmountSubmitted, r, winnerRevenue, burnAmount, charityRevenue, shareholderRevenue, registerRevenue, fee, oneShareholderRev;
 		uint32 i, j, winnerIndex;
 		QRAFFLELogger log;
 		QRAFFLEEmptyTokenRaffleLogger emptyTokenRafflelog;
@@ -1201,9 +1201,9 @@ protected:
 
 	END_EPOCH_WITH_LOCALS()
 	{
-		locals.oneCompRev = div(state.epochRevenue, 676ull);
-		qpi.distributeDividends(locals.oneCompRev);
-		state.epochRevenue -= locals.oneCompRev * 676;
+		locals.oneShareholderRev = div(state.epochRevenue, 676ull);
+		qpi.distributeDividends(locals.oneShareholderRev);
+		state.epochRevenue -= locals.oneShareholderRev * 676;
 
 		locals.digest = qpi.getPrevSpectrumDigest();
 		locals.r = (qpi.numberOfTickTransactions() + 1) * locals.digest.u64._0 + (qpi.second()) * locals.digest.u64._1 + locals.digest.u64._2;
