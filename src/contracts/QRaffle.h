@@ -386,8 +386,8 @@ protected:
 
 	// O(1) lookup: key = (proposalIndex, user) -> vote status (yes/no)
 	struct VoteKey {
-		uint32 proposalIndex;
 		id user;
+		uint32 proposalIndex;
 		bool operator==(const VoteKey& other) const
 		{
 			return proposalIndex == other.proposalIndex && user == other.user;
