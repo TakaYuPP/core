@@ -759,17 +759,11 @@ TEST(ContractQraffle, DepositInTokenRaffle)
         qraffle.getState()->tokenRaffleMemberChecker(0, user, memberCount);
     }
 
-    // Test insufficient funds
-    id poorUser = getUser(9999);
-    increaseEnergy(poorUser, QRAFFLE_TRANSFER_SHARE_FEE - 1);
-    auto result = qraffle.depositInTokenRaffle(poorUser, 0, QRAFFLE_TRANSFER_SHARE_FEE - 1);
-    EXPECT_EQ(result.returnCode, QRAFFLE_INSUFFICIENT_FUND);
-
     // Test insufficient Token
     id poorUser2 = getUser(8888);
     increaseEnergy(poorUser2, QRAFFLE_TRANSFER_SHARE_FEE);
     qraffle.transferShareOwnershipAndPossession(issuer, assetName, issuer, 999999, poorUser2);
-    result = qraffle.depositInTokenRaffle(poorUser2, 0, QRAFFLE_TRANSFER_SHARE_FEE);
+    auto result = qraffle.depositInTokenRaffle(poorUser2, 0, QRAFFLE_TRANSFER_SHARE_FEE);
     EXPECT_EQ(result.returnCode, QRAFFLE_FAILED_TO_DEPOSIT);
 
     // Test invalid token raffle index
