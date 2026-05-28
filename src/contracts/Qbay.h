@@ -1195,6 +1195,7 @@ struct QBAY : public ContractBase
 		QX::TransferShareManagementRights_output transferShareManagementRights_output;
 		InfoOfNFT updatedNFT;
 		sint64 transferredAmountOfCFB;
+		uint64 requiredCFB;
 		sint64 marketFee;
 		sint64 creatorFee;
 		sint64 shareHolderFee;
@@ -1316,17 +1317,29 @@ struct QBAY : public ContractBase
 			{
 				qpi.transfer(qpi.invocator(), qpi.invocationReward());
 			}
-			locals.possessedCFBAmount = qpi.numberOfPossessedShares(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), QBAY_CONTRACT_INDEX, QBAY_CONTRACT_INDEX);
-			if(div(state.get().NFTs.get(input.NFTid).salePrice * 1ULL, state.get().priceOfQubic) > div(locals.possessedCFBAmount * 1ULL, state.get().priceOfCFB)) 
+			if(state.get().priceOfQubic == 0 || state.get().priceOfCFB == 0)
 			{
-				output.returnCode = LogInfo::insufficientQubic;
-				locals.log = Logger{ QBAY_CONTRACT_INDEX, LogInfo::insufficientQubic, 0 };
+				output.returnCode = LogInfo::invalidInput;
+				locals.log = Logger{ QBAY_CONTRACT_INDEX, LogInfo::invalidInput, 0 };
+				LOG_INFO(locals.log);
+				return;
+			}
+			locals.possessedCFBAmount = qpi.numberOfPossessedShares(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), QBAY_CONTRACT_INDEX, QBAY_CONTRACT_INDEX);
+			// Convert QU sale price to CFB using ceil division to avoid zero-cost CFB buys.
+			locals.requiredCFB = div(
+				state.get().NFTs.get(input.NFTid).salePrice * state.get().priceOfCFB + state.get().priceOfQubic - 1ULL,
+				state.get().priceOfQubic
+			);
+			if(locals.requiredCFB == 0 || locals.possessedCFBAmount < 0 || (uint64)locals.possessedCFBAmount < locals.requiredCFB) 
+			{
+				output.returnCode = LogInfo::insufficientCFB;
+				locals.log = Logger{ QBAY_CONTRACT_INDEX, LogInfo::insufficientCFB, 0 };
 				LOG_INFO(locals.log);
 
 				return ;
 			}
 
-			locals.transferredAmountOfCFB = div(state.get().NFTs.get(input.NFTid).salePrice * 1ULL, state.get().priceOfQubic) * state.get().priceOfCFB;
+			locals.transferredAmountOfCFB = (sint64)locals.requiredCFB;
 			locals.creatorFee = div(locals.transferredAmountOfCFB * state.get().NFTs.get(input.NFTid).royalty * 1ULL, 100ULL);
 			locals.marketFee = div(locals.transferredAmountOfCFB * QBAY_FEE_NFT_SALE_MARKET * 1ULL, 1000ULL);
 
