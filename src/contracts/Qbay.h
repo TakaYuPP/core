@@ -9,6 +9,8 @@ constexpr uint32 QBAY_CFB_NAME = 4343363;
 constexpr uint32 QBAY_MIN_DELTA_SIZE = 1000000;
 constexpr uint32 QBAY_FEE_NFT_SALE_MARKET = 20;
 constexpr uint32 QBAY_FEE_NFT_SALE_SHAREHOLDERS = 10;
+// Max royalty so creator% + market (2%) + shareholder (1%) does not exceed 100%.
+constexpr uint32 QBAY_MAX_ROYALTY = 100 - (QBAY_FEE_NFT_SALE_MARKET + QBAY_FEE_NFT_SALE_SHAREHOLDERS) / 10;
 
 struct QBAY2
 {
@@ -241,6 +243,32 @@ struct QBAY : public ContractBase
 		return true;
 	}
 	/****** END PORTED TIMEUTILS FROM OLD QUOTTERY *****/
+
+	inline static bool isValidOraclePrice(uint64 price)
+	{
+		return price > 0 && price < (uint64)MAX_AMOUNT;
+	}
+
+	inline static uint64 ceilDiv(uint64 numerator, uint64 denominator)
+	{
+		return div(numerator + denominator - 1ULL, denominator);
+	}
+
+	// Converts a QU-denominated sale price to required CFB (ceil). Returns false on invalid prices or overflow.
+	inline static bool quSalePriceToRequiredCFB(uint64 salePriceQu, uint64 priceOfCFB, uint64 priceOfQubic, uint64& requiredCFB)
+	{
+		requiredCFB = 0;
+		if (!isValidOraclePrice(priceOfCFB) || !isValidOraclePrice(priceOfQubic) || salePriceQu == 0)
+		{
+			return false;
+		}
+		if (salePriceQu > div((uint64)MAX_AMOUNT, priceOfCFB))
+		{
+			return false;
+		}
+		requiredCFB = ceilDiv(salePriceQu * priceOfCFB, priceOfQubic);
+		return requiredCFB > 0;
+	}
 
 	struct settingCFBAndQubicPrice_input
 	{
@@ -627,6 +655,14 @@ struct QBAY : public ContractBase
 			return ;
 		}
 
+		if (!isValidOraclePrice(input.CFBPrice) || !isValidOraclePrice(input.QubicPrice))
+		{
+			output.returnCode = LogInfo::invalidInput;
+			locals.log = Logger{ QBAY_CONTRACT_INDEX, LogInfo::invalidInput, 0 };
+			LOG_INFO(locals.log);
+			return;
+		}
+
 		state.mut().priceOfCFB = input.CFBPrice;
 		state.mut().priceOfQubic = input.QubicPrice;
 
@@ -660,7 +696,7 @@ struct QBAY : public ContractBase
 			return ;
 		}
 
-		if(input.volume > 10 || input.royalty > 100 || input.priceForDropMint >= (uint64)MAX_AMOUNT)
+		if(input.volume > 10 || input.royalty > QBAY_MAX_ROYALTY || input.priceForDropMint >= (uint64)MAX_AMOUNT)
 		{
 			output.returnCode = LogInfo::invalidInput;  			// volume size should be 0 ~ 10
 			locals.log = Logger{ QBAY_CONTRACT_INDEX, LogInfo::invalidInput, 0 };
@@ -719,6 +755,19 @@ struct QBAY : public ContractBase
 
 		if(qpi.invocator() != state.get().marketPlaceOwner)
 		{
+			if(!isValidOraclePrice(state.get().priceOfCFB) || locals.fee > div((uint64)MAX_AMOUNT, state.get().priceOfCFB))
+			{
+				output.returnCode = LogInfo::invalidInput;
+				locals.log = Logger{ QBAY_CONTRACT_INDEX, LogInfo::invalidInput, 0 };
+				LOG_INFO(locals.log);
+
+				if(qpi.invocationReward() > 0) 
+				{
+					qpi.transfer(qpi.invocator(), qpi.invocationReward());
+				}
+				return ;
+			}
+
 			if(div(locals.possessedAmount * 1ULL, state.get().priceOfCFB) < locals.fee) 
 			{
 				output.returnCode = LogInfo::insufficientCFB;
@@ -789,7 +838,7 @@ struct QBAY : public ContractBase
 
 		if(input.typeOfMint == 1)     //     It means NFT creator mints the single NFT.
 		{
-			if(input.royalty >= 100)
+			if(input.royalty > QBAY_MAX_ROYALTY)
 			{
 				output.returnCode = LogInfo::invalidInput;
 				locals.log = Logger{ QBAY_CONTRACT_INDEX, LogInfo::invalidInput, 0 };
@@ -1317,7 +1366,11 @@ struct QBAY : public ContractBase
 			{
 				qpi.transfer(qpi.invocator(), qpi.invocationReward());
 			}
-			if(state.get().priceOfQubic == 0 || state.get().priceOfCFB == 0)
+			if(!quSalePriceToRequiredCFB(
+				state.get().NFTs.get(input.NFTid).salePrice,
+				state.get().priceOfCFB,
+				state.get().priceOfQubic,
+				locals.requiredCFB))
 			{
 				output.returnCode = LogInfo::invalidInput;
 				locals.log = Logger{ QBAY_CONTRACT_INDEX, LogInfo::invalidInput, 0 };
@@ -1325,12 +1378,7 @@ struct QBAY : public ContractBase
 				return;
 			}
 			locals.possessedCFBAmount = qpi.numberOfPossessedShares(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), QBAY_CONTRACT_INDEX, QBAY_CONTRACT_INDEX);
-			// Convert QU sale price to CFB using ceil division to avoid zero-cost CFB buys.
-			locals.requiredCFB = div(
-				state.get().NFTs.get(input.NFTid).salePrice * state.get().priceOfCFB + state.get().priceOfQubic - 1ULL,
-				state.get().priceOfQubic
-			);
-			if(locals.requiredCFB == 0 || locals.possessedCFBAmount < 0 || (uint64)locals.possessedCFBAmount < locals.requiredCFB) 
+			if(locals.possessedCFBAmount < 0 || (uint64)locals.possessedCFBAmount < locals.requiredCFB) 
 			{
 				output.returnCode = LogInfo::insufficientCFB;
 				locals.log = Logger{ QBAY_CONTRACT_INDEX, LogInfo::insufficientCFB, 0 };
@@ -1342,11 +1390,13 @@ struct QBAY : public ContractBase
 			locals.transferredAmountOfCFB = (sint64)locals.requiredCFB;
 			locals.creatorFee = div(locals.transferredAmountOfCFB * state.get().NFTs.get(input.NFTid).royalty * 1ULL, 100ULL);
 			locals.marketFee = div(locals.transferredAmountOfCFB * QBAY_FEE_NFT_SALE_MARKET * 1ULL, 1000ULL);
+			locals.shareHolderFee = div(locals.transferredAmountOfCFB * QBAY_FEE_NFT_SALE_SHAREHOLDERS * 1ULL, 1000ULL);
 
             qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), locals.marketFee, SELF);
+			qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), locals.shareHolderFee, SELF);
 			qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), locals.creatorFee, state.get().NFTs.get(input.NFTid).creator);
-			qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), locals.transferredAmountOfCFB - locals.creatorFee - locals.marketFee, state.get().NFTs.get(input.NFTid).possessor);
-			state.mut().earnedCFB += locals.marketFee;
+			qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), locals.transferredAmountOfCFB - locals.creatorFee - locals.marketFee - locals.shareHolderFee, state.get().NFTs.get(input.NFTid).possessor);
+			state.mut().earnedCFB += locals.marketFee + locals.shareHolderFee;
 		}
 
 		locals.updatedNFT = state.get().NFTs.get(input.NFTid);
@@ -1648,9 +1698,22 @@ struct QBAY : public ContractBase
 
 		if(state.get().NFTs.get(input.NFTid).statusOfAsk == 1)
 		{
+			if(!isValidOraclePrice(state.get().priceOfCFB) || !isValidOraclePrice(state.get().priceOfQubic))
+			{
+				output.returnCode = LogInfo::invalidInput;
+				locals.log = Logger{ QBAY_CONTRACT_INDEX, LogInfo::invalidInput, 0 };
+				LOG_INFO(locals.log);
+
+				if(qpi.invocationReward() > 0) 
+				{
+					qpi.transfer(qpi.invocator(), qpi.invocationReward());
+				}
+				return ;
+			}
+
 			if((input.askPrice < state.get().NFTs.get(input.NFTid).askMaxPrice + QBAY_MIN_DELTA_SIZE && input.paymentMethod == state.get().NFTs.get(input.NFTid).paymentMethodOfAsk)
-			|| (input.paymentMethod == 1 && state.get().NFTs.get(input.NFTid).paymentMethodOfAsk == 0 && div(input.askPrice * 1ULL, state.get().priceOfCFB) < div((state.get().NFTs.get(input.NFTid).askMaxPrice + QBAY_MIN_DELTA_SIZE) * 1ULL, state.get().priceOfQubic))
-			|| (input.paymentMethod == 0 && state.get().NFTs.get(input.NFTid).paymentMethodOfAsk == 1 && div(input.askPrice * 1ULL, state.get().priceOfQubic) < div((state.get().NFTs.get(input.NFTid).askMaxPrice + QBAY_MIN_DELTA_SIZE) * 1ULL, state.get().priceOfCFB)))
+			|| (input.paymentMethod == 1 && state.get().NFTs.get(input.NFTid).paymentMethodOfAsk == 0 && ceilDiv(input.askPrice, state.get().priceOfCFB) < div((state.get().NFTs.get(input.NFTid).askMaxPrice + QBAY_MIN_DELTA_SIZE) * 1ULL, state.get().priceOfQubic))
+			|| (input.paymentMethod == 0 && state.get().NFTs.get(input.NFTid).paymentMethodOfAsk == 1 && ceilDiv(input.askPrice, state.get().priceOfQubic) < div((state.get().NFTs.get(input.NFTid).askMaxPrice + QBAY_MIN_DELTA_SIZE) * 1ULL, state.get().priceOfCFB)))
 			{
 				output.returnCode = LogInfo::lowPrice;
 				locals.log = Logger{ QBAY_CONTRACT_INDEX, LogInfo::lowPrice, 0 };
@@ -1842,13 +1905,14 @@ struct QBAY : public ContractBase
 			locals.transferShareManagementRights_input.asset.assetName = QBAY_CFB_NAME;
 			locals.transferShareManagementRights_input.asset.issuer = state.get().cfbIssuer;
 			locals.transferShareManagementRights_input.newManagingContractIndex = QBAY_CONTRACT_INDEX;
-			locals.transferShareManagementRights_input.numberOfShares = state.get().NFTs.get(input.NFTid).askMaxPrice - locals.marketFee;
+			locals.transferShareManagementRights_input.numberOfShares = state.get().NFTs.get(input.NFTid).askMaxPrice - locals.marketFee - locals.shareHolderFee;
 
 			INVOKE_OTHER_CONTRACT_PROCEDURE(QX, TransferShareManagementRights, locals.transferShareManagementRights_input, locals.transferShareManagementRights_output, 0);
 
+			qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, SELF, SELF, locals.shareHolderFee, SELF);
 			qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, SELF, SELF, locals.creatorFee, state.get().NFTs.get(input.NFTid).creator);
-			qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, SELF, SELF, state.get().NFTs.get(input.NFTid).askMaxPrice - locals.creatorFee - locals.marketFee, qpi.invocator());
-			state.mut().earnedCFB += locals.marketFee;
+			qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, SELF, SELF, state.get().NFTs.get(input.NFTid).askMaxPrice - locals.creatorFee - locals.marketFee - locals.shareHolderFee, qpi.invocator());
+			state.mut().earnedCFB += locals.marketFee + locals.shareHolderFee;
 		}
 
 		locals.updatedNFT = state.get().NFTs.get(input.NFTid);
@@ -2243,24 +2307,28 @@ struct QBAY : public ContractBase
 			{
 				locals.marketFee = div(input.price * QBAY_FEE_NFT_SALE_MARKET * 1ULL, 1000ULL);
 				locals.creatorFee = div(input.price * state.get().NFTs.get(input.NFTId).royalty * 1ULL, 100ULL);
+				locals.shareHolderFee = div(input.price * QBAY_FEE_NFT_SALE_SHAREHOLDERS * 1ULL, 1000ULL);
 
 				qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), locals.creatorFee, state.get().NFTs.get(input.NFTId).creator);
-				qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), input.price - locals.creatorFee - locals.marketFee, state.get().NFTs.get(input.NFTId).possessor);
+				qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), input.price - locals.creatorFee - locals.marketFee - locals.shareHolderFee, state.get().NFTs.get(input.NFTId).possessor);
 				qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), locals.marketFee, SELF);
+				qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), locals.shareHolderFee, SELF);
 
-				state.mut().earnedCFB += locals.marketFee;
+				state.mut().earnedCFB += locals.marketFee + locals.shareHolderFee;
 			}
 			if(state.get().NFTs.get(input.NFTId).statusOfAuction == 2)
 			{
 				locals.marketFee = div((input.price - state.get().NFTs.get(input.NFTId).currentPriceOfAuction) * QBAY_FEE_NFT_SALE_MARKET * 1ULL, 1000ULL);
 				locals.creatorFee = div((input.price - state.get().NFTs.get(input.NFTId).currentPriceOfAuction) * state.get().NFTs.get(input.NFTId).royalty * 1ULL, 100ULL);
+				locals.shareHolderFee = div((input.price - state.get().NFTs.get(input.NFTId).currentPriceOfAuction) * QBAY_FEE_NFT_SALE_SHAREHOLDERS * 1ULL, 1000ULL);
 
 				qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), locals.marketFee, SELF);
+				qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), locals.shareHolderFee, SELF);
 				qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), locals.creatorFee, state.get().NFTs.get(input.NFTId).creator);
 				qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), state.get().NFTs.get(input.NFTId).currentPriceOfAuction, state.get().NFTs.get(input.NFTId).possessor);
-				qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), input.price - state.get().NFTs.get(input.NFTId).currentPriceOfAuction - locals.marketFee - locals.creatorFee, state.get().NFTs.get(input.NFTId).creatorOfAuction);
+				qpi.transferShareOwnershipAndPossession(QBAY_CFB_NAME, state.get().cfbIssuer, qpi.invocator(), qpi.invocator(), input.price - state.get().NFTs.get(input.NFTId).currentPriceOfAuction - locals.marketFee - locals.creatorFee - locals.shareHolderFee, state.get().NFTs.get(input.NFTId).creatorOfAuction);
 			
-				state.mut().earnedCFB += locals.marketFee;
+				state.mut().earnedCFB += locals.marketFee + locals.shareHolderFee;
 			}
 			
 			locals.updatedBidPrice = input.price;
@@ -2629,7 +2697,7 @@ struct QBAY : public ContractBase
 	locals.cnt = 0;
 	locals._r = 0;
 
-	for(locals._t = state.get().numberOfCollection - 1 ; locals._t >= 0; locals._t--)
+	for(locals._t = (sint32)state.get().numberOfNFT - 1 ; locals._t >= 0; locals._t--)
 	{
 		if(state.get().NFTs.get(locals._t).creator == input.user)
 		{
